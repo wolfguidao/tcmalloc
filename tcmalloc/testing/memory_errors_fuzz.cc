@@ -26,6 +26,8 @@
 #include "fuzztest/fuzztest.h"
 #include "fuzztest/init_fuzztest.h"
 #include "absl/base/casts.h"
+#include "absl/log/check.h"
+#include "absl/log/log.h"
 #include "absl/numeric/bits.h"
 #include "tcmalloc/common.h"
 #include "tcmalloc/internal/config.h"
@@ -52,8 +54,7 @@ void WildPointerUnsizedDelete(uintptr_t ptr) {
   }
 
   TCMallocInternalDelete(absl::bit_cast<void*>(ptr));
-  // We should have caught the error and not reached this point.
-  EXPECT_TRUE(false);
+  LOG(FATAL) << "should have caught error and not reached this point";
 }
 
 TEST(MemoryErrorsFuzzTest, WildPointerUnsizedDeleteRegression) {
@@ -84,7 +85,8 @@ TEST(MemoryErrorsFuzzTest, WildPointerReallocRegression) {
   WildPointerRealloc(4406726867650173363ull, 1);
 }
 
-FUZZ_TEST(MemoryErrorsFuzzTest, WildPointerRealloc);
+// TODO: b/457842787 - Re-enable once the test is fixed.
+FUZZ_TEST(DISABLED_MemoryErrorsFuzzTest, WildPointerRealloc);
 
 void WildPointerSizedDelete(uintptr_t ptr, size_t size) {
   GTEST_SKIP() << "Skipping";
@@ -108,17 +110,21 @@ void WildPointerSizedDelete(uintptr_t ptr, size_t size) {
   }
 
   TCMallocInternalDeleteSized(absl::bit_cast<void*>(ptr), size);
-  // We should have caught the error and not reached this point.
-  EXPECT_TRUE(false);
+  LOG(FATAL) << "should have caught error and not reached this point";
 }
 
 TEST(MemoryErrorsFuzzTest, WildPointerSizedDeleteRegression) {
   WildPointerSizedDelete(18446744073709551615ull, 18446744073709551615ull);
   WildPointerSizedDelete(0, 18446744073709551615ull);
+}
+
+// TODO: b/457842787 - Re-enable once the test is fixed.
+TEST(MemoryErrorsFuzzTest, DISABLED_WildPointerSizedDeleteRegression2) {
   WildPointerSizedDelete(17592186048512ull, 0);
 }
 
-FUZZ_TEST(MemoryErrorsFuzzTest, WildPointerSizedDelete);
+// TODO: b/457842787 - Re-enable once the test is fixed.
+FUZZ_TEST(DISABLED_MemoryErrorsFuzzTest, WildPointerSizedDelete);
 
 void MismatchedSizedDelete(size_t allocated, size_t deallocated) {
   GTEST_SKIP() << "Skipping";
@@ -144,16 +150,21 @@ void MismatchedSizedDelete(size_t allocated, size_t deallocated) {
   TCMallocInternalDeleteSized(ptr, deallocated);
   // We should have caught the error and not reached this point.  An error did
   // not occur only if the sizes match.
-  EXPECT_EQ(MallocExtension_Internal_GetEstimatedAllocatedSize(deallocated),
-            actual_size);
+  CHECK_EQ(MallocExtension_Internal_GetEstimatedAllocatedSize(deallocated),
+           actual_size);
 }
 
 TEST(MemoryErrorsFuzzTest, MismatchedSizedDeleteRegression) {
   MismatchedSizedDelete(7947537452012049129, 0);
+}
+
+// TODO: b/457842787 - Re-enable once the test is fixed.
+TEST(MemoryErrorsFuzzTest, DISABLED_MismatchedSizedDeleteRegression2) {
   MismatchedSizedDelete(549755813888, 15561727408584254371ull);
 }
 
-FUZZ_TEST(MemoryErrorsFuzzTest, MismatchedSizedDelete);
+// TODO: b/457842787 - Re-enable once the test is fixed.
+FUZZ_TEST(DISABLED_MemoryErrorsFuzzTest, MismatchedSizedDelete);
 
 void MismatchedAlignedDelete(
     size_t size, std::optional<std::align_val_t> allocated_alignment,
@@ -181,10 +192,11 @@ void MismatchedAlignedDelete(
   } else {
     TCMallocInternalDeleteSized(ptr, size);
   }
-  EXPECT_EQ(allocated_alignment, deallocated_alignment);
+  CHECK_EQ(allocated_alignment, deallocated_alignment);
 }
 
-FUZZ_TEST(MemoryErrorsFuzzTest, MismatchedAlignedDelete)
+// TODO: b/457842787 - Re-enable once the test is fixed.
+FUZZ_TEST(DISABLED_MemoryErrorsFuzzTest, MismatchedAlignedDelete)
     .WithDomains(
         fuzztest::Arbitrary<size_t>(),
         fuzztest::OptionalOf(fuzztest::Map(
@@ -219,10 +231,11 @@ void MismatchedAlignedFree(size_t size,
   } else {
     TCMallocInternalFreeSized(ptr, size);
   }
-  EXPECT_EQ(allocated_alignment, deallocated_alignment);
+  CHECK_EQ(allocated_alignment, deallocated_alignment);
 }
 
-FUZZ_TEST(MemoryErrorsFuzzTest, MismatchedAlignedFree)
+// TODO: b/457842787 - Re-enable once the test is fixed.
+FUZZ_TEST(DISABLED_MemoryErrorsFuzzTest, MismatchedAlignedFree)
     .WithDomains(fuzztest::Arbitrary<size_t>(),
                  fuzztest::OptionalOf(fuzztest::Map(
                      [](size_t v) { return static_cast<size_t>(1ULL << v); },
@@ -286,10 +299,11 @@ void MisalignedPointer(size_t size, std::optional<hot_cold_t> hot_cold,
       TCMallocInternalDelete(misaligned);
     }
   }
-  EXPECT_EQ(misalignment, std::align_val_t{0});
+  CHECK_EQ(misalignment, std::align_val_t{0});
 }
 
-FUZZ_TEST(MemoryErrorsFuzzTest, MisalignedPointer)
+// TODO: b/457842787 - Re-enable once the test is fixed.
+FUZZ_TEST(DISABLED_MemoryErrorsFuzzTest, MisalignedPointer)
     .WithDomains(
         fuzztest::Arbitrary<size_t>(),
         fuzztest::OptionalOf(

@@ -147,11 +147,7 @@ cc_test(
     copts = TCMALLOC_DEFAULT_COPTS + TCMALLOC_DEFAULT_CXXOPTS,
     malloc = "//tcmalloc/internal:system_malloc",
     tags = [
-        "noasan",
-        "nomsan",
-        "notap",
-        "notsan",
-        "noubsan",
+        "noubsan",  # conflicting symbols
     ],
     visibility = ["//visibility:private"],
     deps = [
@@ -162,6 +158,8 @@ cc_test(
         "//tcmalloc/internal:config",
         "//tcmalloc/internal:memory_tag",
         "@com_google_absl//absl/base",
+        "@com_google_absl//absl/log",
+        "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/numeric:bits",
         "@com_google_fuzztest//fuzztest",
         "@com_google_fuzztest//fuzztest:init_fuzztest",
