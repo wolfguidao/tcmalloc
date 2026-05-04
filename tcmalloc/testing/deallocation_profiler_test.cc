@@ -333,7 +333,7 @@ TEST_F(DeallocationzTest, MultiThreaded) {
   block_objects_ = 100;
   // for multi-threaded, t_threads must be > 2 (due to design of the test).
   t_threads_ = 4;
-  sleep_time_ = absl::Seconds(9);
+  sleep_time_ = absl::Seconds(1);
   req_size_ = 1024 * 1024;
   req_alignment_ = std::align_val_t{64};
   Run();
