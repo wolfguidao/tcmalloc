@@ -245,9 +245,6 @@ ABSL_CONST_INIT std::atomic<int32_t> Parameters::back_size_threshold_bytes_(
     kPageSize);
 ABSL_CONST_INIT std::atomic<bool> Parameters::enable_unfiltered_collapse_(
     false);
-ABSL_CONST_INIT std::atomic<central_freelist_internal::LifetimeTracking>
-    Parameters::span_lifetime_tracking_(
-        central_freelist_internal::LifetimeTracking::kDisabled);
 
 static std::atomic<bool>& back_small_allocations_enabled() {
   ABSL_CONST_INIT static absl::once_flag flag;
@@ -321,9 +318,37 @@ bool Parameters::heap_partitioning() {
 bool Parameters::back_small_allocations() {
   return back_small_allocations_enabled().load(std::memory_order_relaxed);
 }
+
+bool ABSL_ATTRIBUTE_WEAK default_want_disable_span_lifetime_tracking();
+static central_freelist_internal::LifetimeTracking
+want_span_lifetime_tracking() {
+  if (default_want_disable_span_lifetime_tracking != nullptr) {
+    return central_freelist_internal::LifetimeTracking::kDisabled;
+  }
+  const char* e = thread_safe_getenv("TCMALLOC_DISABLE_SPAN_LIFETIME_TRACKING");
+  if (e) {
+    switch (e[0]) {
+      case '0':
+        return central_freelist_internal::LifetimeTracking::kDisabled;
+      case '1':
+        return central_freelist_internal::LifetimeTracking::kDisabled;
+      default:
+        TC_BUG("bad env var '%s'", e);
+    }
+  }
+  return central_freelist_internal::LifetimeTracking::kDisabled;
+}
+
 central_freelist_internal::LifetimeTracking
 Parameters::span_lifetime_tracking() {
-  return span_lifetime_tracking_.load(std::memory_order_relaxed);
+  ABSL_CONST_INIT static absl::once_flag flag;
+  ABSL_CONST_INIT static std::atomic<
+      central_freelist_internal::LifetimeTracking>
+      v{central_freelist_internal::LifetimeTracking::kDisabled};
+  absl::base_internal::LowLevelCallOnce(&flag, [&]() {
+    v.store(want_span_lifetime_tracking(), std::memory_order_relaxed);
+  });
+  return v.load(std::memory_order_relaxed);
 }
 
 int32_t Parameters::max_per_cpu_cache_size() {

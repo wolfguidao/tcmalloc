@@ -1628,6 +1628,17 @@ cc_library(
     deps = ["@com_google_absl//absl/base:core_headers"],
 )
 
+cc_library(
+    name = "want_disable_span_lifetime_tracking",
+    srcs = ["want_disable_span_lifetime_tracking.cc"],
+    copts = ["-g0"] + TCMALLOC_DEFAULT_COPTS,
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_google_absl//absl/base:core_headers",
+    ],
+    alwayslink = 1,
+)
+
 # Expose internals to privileged external repositories.
 package_group(
     name = "friends",
