@@ -93,6 +93,12 @@ void FuzzSpanInstructions(size_t object_size_direct, Length num_pages_direct,
                           uint8_t num_objects_to_move,
                           std::vector<Instruction> instructions) {
   GTEST_SKIP() << "Skipping";
+
+#if ABSL_HAVE_HWADDRESS_SANITIZER
+  GTEST_SKIP()
+      << "Skipping under HWASan, which uses the top bits of the pointer.";
+#endif
+
   std::vector<void*> live_ptrs;
   std::vector<void*> batch;
   std::mt19937 rng;
