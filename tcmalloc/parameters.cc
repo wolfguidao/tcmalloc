@@ -319,7 +319,8 @@ bool Parameters::back_small_allocations() {
   return back_small_allocations_enabled().load(std::memory_order_relaxed);
 }
 
-bool ABSL_ATTRIBUTE_WEAK default_want_disable_span_lifetime_tracking();
+extern "C" bool ABSL_ATTRIBUTE_WEAK
+default_want_disable_span_lifetime_tracking();
 static central_freelist_internal::LifetimeTracking
 want_span_lifetime_tracking() {
   if (default_want_disable_span_lifetime_tracking != nullptr) {
@@ -329,14 +330,14 @@ want_span_lifetime_tracking() {
   if (e) {
     switch (e[0]) {
       case '0':
-        return central_freelist_internal::LifetimeTracking::kDisabled;
+        return central_freelist_internal::LifetimeTracking::kEnabled;
       case '1':
         return central_freelist_internal::LifetimeTracking::kDisabled;
       default:
         TC_BUG("bad env var '%s'", e);
     }
   }
-  return central_freelist_internal::LifetimeTracking::kDisabled;
+  return central_freelist_internal::LifetimeTracking::kEnabled;
 }
 
 central_freelist_internal::LifetimeTracking
