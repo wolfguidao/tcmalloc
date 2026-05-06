@@ -61,7 +61,10 @@ struct FuzzHugePageAwareAllocatorOptions {
 
   explicit operator HugePageAwareAllocatorOptions() const {
     HugePageAwareAllocatorOptions options;
-    options.tag = tag;
+    // Roundtrip the tag through kTagMask.  Under some sanitizers, we restrict
+    // the width of the tag.
+    options.tag = static_cast<MemoryTag>(
+        ((static_cast<uintptr_t>(tag) << kTagShift) & kTagMask) >> kTagShift);
     options.use_huge_region_more_often = use_huge_region_more_often;
     options.huge_cache_time = absl::Nanoseconds(huge_cache_time_ns);
     return options;
@@ -489,6 +492,9 @@ void FuzzHPAA(FuzzHugePageAwareAllocatorOptions fuzz_options,
               Length released;
               size_t releasable_bytes;
               PageReleaseStats actual_stats;
+              // If we might run other operations when we simulate the lock
+              // being released, we might not get the results we expected.
+              const bool reentrant_was_pending = !reentrant_stack.empty();
               {
                 PageHeapSpinLockHolder l;
                 releasable_bytes = allocator.FillerStats().free_bytes +
@@ -499,10 +505,10 @@ void FuzzHPAA(FuzzHugePageAwareAllocatorOptions fuzz_options,
                 actual_stats = allocator.GetReleaseStats();
               }
 
-              if (forwarder.release_succeeds()) {
+              if (forwarder.release_succeeds() && !reentrant_was_pending) {
                 const size_t min_released =
                     std::min(desired.in_bytes(), releasable_bytes);
-                TC_CHECK_GE(released.in_bytes(), min_released);
+                EXPECT_GE(released.in_bytes(), min_released);
               } else {
                 // TODO(b/271282540):  This is not strict equality due to
                 // HugePageFiller's unmapping_unaccounted_ state.  Narrow this
@@ -883,6 +889,26 @@ TEST(HugePageAwareAllocatorTest, b470332457) {
                                         .duration_ns = 7795569869804108969}}},
        Instruction{.instr = ReleasePages{.desired = 9223372036854775807,
                                          .release_memory_to_system = false}}});
+}
+
+TEST(HugePageAwareAllocatorTest, b509249056) {
+  FuzzHPAA(
+      FuzzHugePageAwareAllocatorOptions{
+          .tag = static_cast<tcmalloc::tcmalloc_internal::MemoryTag>(4),
+          .use_huge_region_more_often =
+              static_cast<tcmalloc::tcmalloc_internal::HugeRegionUsageOption>(
+                  0),
+          .huge_cache_time_ns = 3600000000000},
+      {Instruction{ChangeParam{ReentrantSubprogram{
+           {Instruction{ReleasePagesBreakingHugepages{1, false}}}}}},
+       Instruction{Alloc{15576967129319913528ULL, 1, 18446744073709551615ULL,
+                         false, false}},
+       Instruction{Alloc{9223372036854775807ULL, 0, 9223372036854775809ULL,
+                         false, false}},
+       Instruction{GatherStatsPbtxt{}}, Instruction{PrintStats{true}},
+       Instruction{Dealloc{18446744073709551615ULL}},
+       Instruction{
+           ReleasePagesBreakingHugepages{18446744073709551615ULL, true}}});
 }
 
 }  // namespace

@@ -1207,6 +1207,7 @@ inline AddressRange HugePageAwareAllocator<Forwarder>::AllocAndReport(
     size_t bytes, size_t align) {
   auto ret = forwarder_.AllocatePages(bytes, align, tag_);
   if (ret.ptr == nullptr) return ret;
+  TC_ASSERT_EQ(GetMemoryTag(ret.ptr), tag_);
   const PageId page = PageIdContaining(ret.ptr);
   const Length page_len = BytesToLengthFloor(ret.bytes);
   TC_CHECK(forwarder_.Ensure(Range(page, page_len)),

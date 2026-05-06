@@ -167,11 +167,10 @@ class FakeStaticForwarder {
     } while (!fake_allocation_.compare_exchange_weak(
         allocation, new_allocation, std::memory_order_relaxed));
 
-    AddressRange ret{
-        reinterpret_cast<void*>(aligned_allocation |
-                                (static_cast<uintptr_t>(tag) << kTagShift)),
-        bytes};
-    return ret;
+    void* ptr = reinterpret_cast<void*>(
+        aligned_allocation | (static_cast<uintptr_t>(tag) << kTagShift));
+    TC_CHECK_EQ(GetMemoryTag(ptr), tag);
+    return AddressRange{ptr, bytes};
   }
 
   void Back(Range r) {
