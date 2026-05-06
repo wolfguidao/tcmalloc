@@ -173,4 +173,26 @@ TEST(SizeMapTest, PointerPartitionNoCold) {
               ElementsAreArray(expected_cold_size_classes));
 }
 
+TEST(SizeMapTest, HeapPartitioningSizeZero) {
+  if (!tc_globals.multiple_non_numa_partitions()) {
+    GTEST_SKIP() << "Heap partitioning not active";
+  }
+  const auto& classes = kSizeClasses.classes;
+  SizeMap size_map;
+  EXPECT_TRUE(size_map.Init(classes));
+  // Map Partition 0 Size 0.
+  size_t base_c =
+      size_map.SizeClass(CppPolicy().WithSecurityToken<TokenId{0}>(), 0);
+  EXPECT_GT(base_c, 0);
+  EXPECT_GT(size_map.class_to_size(base_c), 0);
+  // Map Partition 1 Size 0.
+  size_t part1_c = size_map.SizeClass(
+      CppPolicy().WithSecurityToken<TokenId::kAllocToken1>(), 0);
+  EXPECT_GE(part1_c, kNumBaseClasses)
+      << "Size 0 must belong to Partition 1's range";
+  EXPECT_NE(part1_c, kNumBaseClasses)
+      << "Size 0 must not map to the dummy class";
+  EXPECT_EQ(part1_c, base_c + kNumBaseClasses);
+}
+
 }  // namespace tcmalloc::tcmalloc_internal

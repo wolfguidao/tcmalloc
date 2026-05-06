@@ -31,6 +31,8 @@ int main() {
   tcmalloc::MallocExtension::SetProfileSamplingInterval(-1);
   void* ptr_0 = __alloc_token_0_malloc(8);
   void* ptr_1 = __alloc_token_1_malloc(8);
+  void* ptr_0_sz0 = __alloc_token_0_malloc(0);
+  void* ptr_1_sz0 = __alloc_token_1_malloc(0);
 
   bool security_partitioning = tcmalloc::MallocExtension::GetNumericProperty(
                                    "tcmalloc.security_partitioning_active")
@@ -38,12 +40,18 @@ int main() {
 
   absl::string_view tag_0 = MemoryTagToLabel(GetMemoryTag(ptr_0));
   absl::string_view tag_1 = MemoryTagToLabel(GetMemoryTag(ptr_1));
+  absl::string_view tag_0_sz0 = MemoryTagToLabel(GetMemoryTag(ptr_0_sz0));
+  absl::string_view tag_1_sz0 = MemoryTagToLabel(GetMemoryTag(ptr_1_sz0));
 
   absl::PrintF("security_partitioning:%d\n", security_partitioning);
   absl::PrintF("ptr_0_tag:%s\n", tag_0);
   absl::PrintF("ptr_1_tag:%s\n", tag_1);
+  absl::PrintF("ptr_0_sz0_tag:%s\n", tag_0_sz0);
+  absl::PrintF("ptr_1_sz0_tag:%s\n", tag_1_sz0);
 
   free(ptr_0);
   free(ptr_1);
+  free(ptr_0_sz0);
+  free(ptr_1_sz0);
   return 0;
 }

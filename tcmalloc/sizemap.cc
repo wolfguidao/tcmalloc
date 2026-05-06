@@ -260,7 +260,8 @@ bool SizeMap::Init(absl::Span<const SizeClassInfo> size_classes) {
     std::copy(&class_array_[0], &class_array_[kClassArraySize],
               &class_array_[kClassArraySize]);
     if (heap_partitioning_active) {
-      for (int c = kNumBaseClasses; c < kExpandedClassesStart; ++c) {
+      next_size = 0;
+      for (int c = kNumBaseClasses + 1; c < kExpandedClassesStart; ++c) {
         const int max_size_in_class = class_to_size_[c];
 
         for (int s = next_size; s <= max_size_in_class;
