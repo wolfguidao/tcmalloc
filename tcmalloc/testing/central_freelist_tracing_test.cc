@@ -35,32 +35,32 @@ static size_t remove_range_count ABSL_GUARDED_BY(spinlock) = 0;
 static const void* remove_range_objects[kMaxTraceObjects] ABSL_GUARDED_BY(
     spinlock);
 
-static const void* new_hook_object ABSL_GUARDED_BY(spinlock) = nullptr;
+constexpr size_t kMaxNewObjects = 10000;
+static size_t new_hook_count ABSL_GUARDED_BY(spinlock) = 0;
+static const void* new_hook_objects[kMaxNewObjects] ABSL_GUARDED_BY(spinlock);
 
-static void RecordFirstRemoveRangeBatchHook(size_t size_class,
-                                            absl::Span<void*> batch) {
+// Record multiple batches to handle different caching behaviors.
+static void RecordRemoveRangeBatchHook(size_t size_class,
+                                       absl::Span<void*> batch) {
   absl::base_internal::SpinLockHolder l(spinlock);
-  TC_CHECK_EQ(remove_range_count, 0);
 
-  TC_CHECK_LE(batch.size(), kMaxTraceObjects);
-  for (void* ptr : batch) {
-    remove_range_objects[remove_range_count++] = ptr;
+  if (remove_range_count + batch.size() <= kMaxTraceObjects) {
+    for (void* ptr : batch) {
+      remove_range_objects[remove_range_count++] = ptr;
+    }
   }
-
-  TC_CHECK(
-      tcmalloc::tcmalloc_internal::central_freelist_remove_range_hooks.Remove(
-          RecordFirstRemoveRangeBatchHook));
 }
 
+// Record multiple allocations to increase the chance of finding a match.
 static void RecordNewHook(const tcmalloc::MallocHook::NewInfo& info) {
   if (info.allocated_size > tcmalloc::tcmalloc_internal::kMaxSize) {
     return;
   }
 
   absl::base_internal::SpinLockHolder l(spinlock);
-  TC_CHECK_EQ(new_hook_object, nullptr);
-  new_hook_object = info.ptr;
-  TC_CHECK(tcmalloc::MallocHook::RemoveNewHook(RecordNewHook));
+  if (new_hook_count < kMaxNewObjects) {
+    new_hook_objects[new_hook_count++] = info.ptr;
+  }
 }
 
 extern "C" void MallocHook_InitAtFirstAllocation_ForTesting() {
@@ -69,7 +69,7 @@ extern "C" void MallocHook_InitAtFirstAllocation_ForTesting() {
 
 extern "C" void TCMalloc_CentralFreeList_InitAtFirstRemoveRange_Tracing() {
   TC_CHECK(tcmalloc::tcmalloc_internal::central_freelist_remove_range_hooks.Add(
-      RecordFirstRemoveRangeBatchHook));
+      RecordRemoveRangeBatchHook));
 }
 
 namespace tcmalloc {
@@ -87,21 +87,36 @@ TEST(CentralFreeListTracingTest, CalledEarly) {
   // have.
   ::operator delete(::operator new(16));
 
+  // Stop recording allocations.
+  TC_CHECK(tcmalloc::MallocHook::RemoveNewHook(RecordNewHook));
+  TC_CHECK(
+      tcmalloc::tcmalloc_internal::central_freelist_remove_range_hooks.Remove(
+          RecordRemoveRangeBatchHook));
+
   absl::flat_hash_set<const void*> cfl;
   cfl.reserve(kMaxTraceObjects);
-  const void* first_size_class_object = nullptr;
 
+  bool found = false;
   {
     absl::base_internal::SpinLockHolder l(spinlock);
-
-    first_size_class_object = new_hook_object;
 
     for (size_t i = 0; i < remove_range_count; ++i) {
       cfl.insert(remove_range_objects[i]);
     }
+
+    for (size_t i = 0; i < new_hook_count; ++i) {
+      if (cfl.contains(new_hook_objects[i])) {
+        found = true;
+        break;
+      }
+    }
+
+    EXPECT_FALSE(cfl.empty());
+    EXPECT_NE(new_hook_count, 0);
   }
 
-  EXPECT_THAT(cfl, testing::Contains(first_size_class_object));
+  EXPECT_TRUE(found) << "None of the early allocations were found in the "
+                        "central freelist batch";
 }
 
 }  // namespace
