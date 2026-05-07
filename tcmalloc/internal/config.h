@@ -87,15 +87,28 @@
 
 #define TCMALLOC_CAPTURED_BY_THIS ABSL_INTERNAL_ATTRIBUTE_CAPTURED_BY(this)
 
+// TCMalloc uses asm goto with output constraints to optimize its per-CPU
+// implementation, avoiding an otherwise redundant branch.
+//
+// Support in GCC uncovered a miscompile in the kernel
+// (https://gcc.gnu.org/bugzilla/show_bug.cgi?id=113921) necessitating GCC 12.1,
+// which was released May 2022 (https://gcc.gnu.org/releases.html).
+//
+// Support in Clang landed in Clang 10
+// (https://github.com/llvm/llvm-project/commit/52366088a8e42c2f1e96e8430b84b8b65ec3f7bc),
+// which was released March 2020 (https://releases.llvm.org/).  Nevertheless,
+// we've always used Clang 11+ as our condition for it
+// (https://github.com/google/tcmalloc/commit/ca9fa6e5a5b283eebcf008ba081491a0d946f57d),
+// which was released October 2020.
 #if defined(__GNUC__) && !defined(__clang__)
-#if __GNUC__ < 9 || (__GNUC__ == 9 && __GNUC_MINOR__ < 2)
-#error "GCC 9.2 or higher is required."
+#if __GNUC__ < 12 || (__GNUC__ == 12 && __GNUC_MINOR__ < 1)
+#error "GCC 12.1 or higher is required."
 #endif
 #endif
 
 #if defined(__clang__)
-#if __clang_major__ < 9
-#error "Clang 9 or higher is required."
+#if __clang_major__ < 11
+#error "Clang 11 or higher is required."
 #endif
 #endif
 
