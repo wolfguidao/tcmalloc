@@ -24,6 +24,7 @@
 #include <variant>
 #include <vector>
 
+#include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "fuzztest/fuzztest.h"
 #include "absl/container/flat_hash_map.h"
@@ -53,6 +54,8 @@
 
 namespace tcmalloc::tcmalloc_internal {
 namespace {
+
+using testing::HasSubstr;
 
 // As we read the fuzzer input, we update these variables to control global
 // state.
@@ -255,7 +258,14 @@ struct TreatTrackers {
 
   template <typename Sink>
   friend void AbslStringify(Sink& sink, const TreatTrackers& t) {
-    absl::Format(&sink, "TreatTrackers{...}");
+    absl::Format(&sink,
+                 "TreatTrackers{.enable_collapse=%v, "
+                 ".enable_release_free_swap=%v, "
+                 ".use_userspace_collapse_heuristics=%v, "
+                 ".enable_unfiltered_collapse=%v}",
+                 t.enable_collapse, t.enable_release_free_swap,
+                 t.use_userspace_collapse_heuristics,
+                 t.enable_unfiltered_collapse);
   }
 };
 
@@ -267,7 +277,12 @@ struct UpdateBitmaps {
 
   template <typename Sink>
   friend void AbslStringify(Sink& sink, const UpdateBitmaps& u) {
-    absl::Format(&sink, "UpdateBitmaps{...}");
+    absl::Format(&sink,
+                 "UpdateBitmaps{.hugepage_backed_set=%v, "
+                 ".hugepage_backed_val=%v, .unbacked_bitmap_val=%d, "
+                 ".swapped_bitmap_val=%d}",
+                 u.hugepage_backed_set, u.hugepage_backed_val,
+                 u.unbacked_bitmap_val, u.swapped_bitmap_val);
   }
 };
 
@@ -303,6 +318,12 @@ using Instruction =
                  GatherStatsPbtxt, GatherSpanStats, TreatTrackers,
                  UpdateBitmaps, ToggleCollapseSuccess, SetErrorNumber,
                  SetCollapseLatency>;
+
+template <typename Sink>
+void AbslStringify(Sink& sink, const Instruction& inst) {
+  std::visit([&sink](const auto& arg) { absl::Format(&sink, "%v", arg); },
+             inst);
+}
 
 void FuzzFiller(const std::vector<Instruction>& instructions) {
   // Reset global state.
@@ -674,6 +695,22 @@ FUZZ_TEST(HugePageFillerTest, FuzzFiller)
     .WithDomains(fuzztest::VectorOf(GetInstructionDomain()).WithMaxSize(20000));
 
 TEST(HugePageFillerTest, FuzzFillerRegression) { FuzzFiller({}); }
+
+TEST(HugePageFillerTest, InstructionStringify) {
+  {
+    Instruction inst =
+        Allocate{.length = 1, .num_objects = 2, .density_dense = true};
+    std::string s = absl::StrFormat("%v", inst);
+    EXPECT_EQ(s, "Allocate{.length=1, .num_objects=2, .density_dense=true}");
+    EXPECT_THAT(s, Not(HasSubstr("<MAPPING_FUNCTION>")));
+  }
+  {
+    Instruction inst = Deallocate{.tracker_index = 3, .alloc_index = 4};
+    std::string s = absl::StrFormat("%v", inst);
+    EXPECT_EQ(s, "Deallocate{.tracker_index=3, .alloc_index=4}");
+    EXPECT_THAT(s, Not(HasSubstr("<MAPPING_FUNCTION>")));
+  }
+}
 
 }  // namespace
 }  // namespace tcmalloc::tcmalloc_internal
