@@ -76,11 +76,11 @@ struct FuzzHugePageAwareAllocatorOptions {
     absl::Format(
         &sink,
         "FuzzHugePageAwareAllocatorOptions{"
-        ".tag = static_cast<tcmalloc::tcmalloc_internal::MemoryTag>(%d), "
+        ".tag = static_cast<tcmalloc::tcmalloc_internal::MemoryTag>(%v), "
         ".use_huge_region_more_often = "
         "static_cast<tcmalloc::tcmalloc_internal::"
-        "HugeRegionUsageOption>(%d), "
-        ".huge_cache_time_ns = %d}",
+        "HugeRegionUsageOption>(%v), "
+        ".huge_cache_time_ns = %v}",
         static_cast<int>(options.tag),
         static_cast<int>(options.use_huge_region_more_often),
         options.huge_cache_time_ns);
@@ -117,8 +117,8 @@ struct Alloc {
   template <typename Sink>
   friend void AbslStringify(Sink& sink, const Alloc& a) {
     absl::Format(&sink,
-                 "Alloc{.length=%d, .num_objects=%d, .alignment=%d, "
-                 ".use_aligned=%d, .dense=%d}",
+                 "Alloc{.length=%v, .num_objects=%v, .alignment=%v, "
+                 ".use_aligned=%v, .dense=%v}",
                  a.length, a.num_objects, a.alignment, a.use_aligned, a.dense);
   }
 };
@@ -128,7 +128,7 @@ struct Dealloc {
 
   template <typename Sink>
   friend void AbslStringify(Sink& sink, const Dealloc& d) {
-    absl::Format(&sink, "Dealloc{.index=%d}", d.index);
+    absl::Format(&sink, "Dealloc{.index=%v}", d.index);
   }
 };
 
@@ -139,7 +139,7 @@ struct ReleasePages {
   template <typename Sink>
   friend void AbslStringify(Sink& sink, const ReleasePages& r) {
     absl::Format(&sink,
-                 "ReleasePages{.desired=%d, .release_memory_to_system=%d}",
+                 "ReleasePages{.desired=%v, .release_memory_to_system=%v}",
                  r.desired, r.release_memory_to_system);
   }
 };
@@ -152,8 +152,8 @@ struct ReleasePagesBreakingHugepages {
   friend void AbslStringify(Sink& sink,
                             const ReleasePagesBreakingHugepages& r) {
     absl::Format(&sink,
-                 "ReleasePagesBreakingHugepages{.desired=%d, "
-                 ".soft_limit_exceeded=%d}",
+                 "ReleasePagesBreakingHugepages{.desired=%v, "
+                 ".soft_limit_exceeded=%v}",
                  r.desired, r.soft_limit_exceeded);
   }
 };
@@ -170,7 +170,7 @@ struct PrintStats {
 
   template <typename Sink>
   friend void AbslStringify(Sink& sink, const PrintStats& p) {
-    absl::Format(&sink, "PrintStats{.everything=%d}", p.everything);
+    absl::Format(&sink, "PrintStats{.everything=%v}", p.everything);
   }
 };
 
@@ -188,7 +188,7 @@ struct SetFillerSkipSubreleaseShortInterval {
   friend void AbslStringify(Sink& sink,
                             const SetFillerSkipSubreleaseShortInterval& s) {
     absl::Format(&sink,
-                 "SetFillerSkipSubreleaseShortInterval{.duration_ns = %d}",
+                 "SetFillerSkipSubreleaseShortInterval{.duration_ns = %v}",
                  s.duration_ns);
   }
 };
@@ -200,7 +200,7 @@ struct SetFillerSkipSubreleaseLongInterval {
   friend void AbslStringify(Sink& sink,
                             const SetFillerSkipSubreleaseLongInterval& s) {
     absl::Format(&sink,
-                 "SetFillerSkipSubreleaseLongInterval{.duration_ns = %d}",
+                 "SetFillerSkipSubreleaseLongInterval{.duration_ns = %v}",
                  s.duration_ns);
   }
 };
@@ -210,7 +210,7 @@ struct SetReleasePartialAllocPages {
 
   template <typename Sink>
   friend void AbslStringify(Sink& sink, const SetReleasePartialAllocPages& s) {
-    absl::Format(&sink, "SetReleasePartialAllocPages{.value=%d}", s.value);
+    absl::Format(&sink, "SetReleasePartialAllocPages{.value=%v}", s.value);
   }
 };
 
@@ -219,7 +219,7 @@ struct SetHpaaSubrelease {
 
   template <typename Sink>
   friend void AbslStringify(Sink& sink, const SetHpaaSubrelease& s) {
-    absl::Format(&sink, "SetHpaaSubrelease{.value=%d}", s.value);
+    absl::Format(&sink, "SetHpaaSubrelease{.value=%v}", s.value);
   }
 };
 
@@ -228,7 +228,7 @@ struct SetReleaseSucceeds {
 
   template <typename Sink>
   friend void AbslStringify(Sink& sink, const SetReleaseSucceeds& s) {
-    absl::Format(&sink, "SetReleaseSucceeds{.value=%d}", s.value);
+    absl::Format(&sink, "SetReleaseSucceeds{.value=%v}", s.value);
   }
 };
 
@@ -238,7 +238,7 @@ struct SetHugeRegionDemandBasedRelease {
   template <typename Sink>
   friend void AbslStringify(Sink& sink,
                             const SetHugeRegionDemandBasedRelease& s) {
-    absl::Format(&sink, "SetHugeRegionDemandBasedRelease{.value=%d}", s.value);
+    absl::Format(&sink, "SetHugeRegionDemandBasedRelease{.value=%v}", s.value);
   }
 };
 
@@ -248,7 +248,7 @@ struct SetUseUserspaceCollapseHeuristics {
   template <typename Sink>
   friend void AbslStringify(Sink& sink,
                             const SetUseUserspaceCollapseHeuristics& s) {
-    absl::Format(&sink, "SetUseUserspaceCollapseHeuristics{.value=%d}",
+    absl::Format(&sink, "SetUseUserspaceCollapseHeuristics{.value=%v}",
                  s.value);
   }
 };
@@ -258,7 +258,7 @@ struct SetBackAllocations {
 
   template <typename Sink>
   friend void AbslStringify(Sink& sink, const SetBackAllocations& s) {
-    absl::Format(&sink, "SetBackAllocations{.value=%d}", s.value);
+    absl::Format(&sink, "SetBackAllocations{.value=%v}", s.value);
   }
 };
 
@@ -267,7 +267,7 @@ struct SetBackSizeThresholdBytes {
 
   template <typename Sink>
   friend void AbslStringify(Sink& sink, const SetBackSizeThresholdBytes& s) {
-    absl::Format(&sink, "SetBackSizeThresholdBytes{.value=%d}", s.value);
+    absl::Format(&sink, "SetBackSizeThresholdBytes{.value=%v}", s.value);
   }
 };
 
@@ -283,7 +283,7 @@ struct SetEnableUnfilteredCollapse {
 
   template <typename Sink>
   friend void AbslStringify(Sink& sink, const SetEnableUnfilteredCollapse& s) {
-    absl::Format(&sink, "SetEnableUnfilteredCollapse{.value=%d}", s.value);
+    absl::Format(&sink, "SetEnableUnfilteredCollapse{.value=%v}", s.value);
   }
 };
 
@@ -909,6 +909,31 @@ TEST(HugePageAwareAllocatorTest, b509249056) {
        Instruction{Dealloc{18446744073709551615ULL}},
        Instruction{
            ReleasePagesBreakingHugepages{18446744073709551615ULL, true}}});
+}
+
+TEST(HugePageAwareAllocatorTest, PrinterTest) {
+  Alloc a{.length = 15576967129319913528ULL,
+          .num_objects = 1,
+          .alignment = 18446744073709551615ULL,
+          .use_aligned = false,
+          .dense = true};
+  EXPECT_EQ(
+      absl::StrCat(a),
+      "Alloc{.length=15576967129319913528, .num_objects=1, "
+      ".alignment=18446744073709551615, .use_aligned=false, .dense=true}");
+
+  Dealloc d{.index = 18446744073709551615ULL};
+  EXPECT_EQ(absl::StrCat(d), "Dealloc{.index=18446744073709551615}");
+
+  Instruction i{Alloc{1, 2, 3, true, false}};
+  EXPECT_EQ(absl::StrCat(i),
+            "Instruction{.instr=Alloc{.length=1, .num_objects=2, .alignment=3, "
+            ".use_aligned=true, .dense=false}}");
+
+  ReentrantSubprogram r{{Instruction{Dealloc{5}}}};
+  EXPECT_EQ(absl::StrCat(r),
+            "ReentrantSubprogram{.subprogram={Instruction{.instr=Dealloc{."
+            "index=5}}}}");
 }
 
 }  // namespace
