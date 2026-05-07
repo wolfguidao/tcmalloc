@@ -506,7 +506,7 @@ void FuzzFiller(const std::vector<Instruction>& instructions) {
             // Advance clock
             // amount: Advances clock by this amount in arbitrary units.
             fake_clock += absl::ToInt64Nanoseconds(
-                std::min(arg.amount, absl::Seconds(1)));
+                std::clamp(arg.amount, absl::ZeroDuration(), absl::Seconds(1)));
           } else if constexpr (std::is_same_v<T, ToggleUnback>) {
             // Toggle unback, simulating madvise potentially failing or
             // succeeding.
@@ -626,7 +626,8 @@ void FuzzFiller(const std::vector<Instruction>& instructions) {
                 break;
             }
           } else if constexpr (std::is_same_v<T, SetCollapseLatency>) {
-            collapse_latency = absl::ToInt64Nanoseconds(arg.latency);
+            collapse_latency = absl::ToInt64Nanoseconds(std::clamp(
+                arg.latency, absl::ZeroDuration(), absl::Seconds(1)));
           }
         },
         inst);
@@ -701,6 +702,43 @@ FUZZ_TEST(HugePageFillerTest, FuzzFiller)
     .WithDomains(fuzztest::VectorOf(GetInstructionDomain()).WithMaxSize(20000));
 
 TEST(HugePageFillerTest, FuzzFillerRegression) { FuzzFiller({}); }
+
+TEST(HugePageFillerTest, b510325622) {
+  FuzzFiller(
+      {SetCollapseLatency{.latency = absl::Nanoseconds(1229275970250789748)},
+       Release{.hit_limit = true,
+               .use_peak_interval = false,
+               .peak_interval = absl::Nanoseconds(1),
+               .short_interval = absl::ZeroDuration(),
+               .long_interval = absl::Nanoseconds(1),
+               .desired_pages = 1,
+               .release_partial_allocs = true},
+       MemoryLimitHitRelease{.desired = 15389},
+       UpdateBitmaps{.hugepage_backed_set = true,
+                     .hugepage_backed_val = false,
+                     .unbacked_bitmap_val = 65533,
+                     .swapped_bitmap_val = 32767},
+       SetCollapseLatency{.latency = absl::Nanoseconds(1876442616651942554)},
+       Allocate{.length = 65535, .num_objects = 0, .density_dense = true},
+       Allocate{
+           .length = 22787, .num_objects = 2147483647, .density_dense = true},
+       SetCollapseLatency{.latency = absl::ZeroDuration()},
+       SetCollapseLatency{.latency = absl::Nanoseconds(1997603242660686471)},
+       Release{.hit_limit = false,
+               .use_peak_interval = true,
+               .peak_interval = absl::ZeroDuration(),
+               .short_interval = absl::ZeroDuration(),
+               .long_interval = absl::ZeroDuration(),
+               .desired_pages = 1,
+               .release_partial_allocs = true},
+       Allocate{.length = 0, .num_objects = 1, .density_dense = false},
+       TreatTrackers{.enable_collapse = true,
+                     .enable_release_free_swap = true,
+                     .use_userspace_collapse_heuristics = true,
+                     .enable_unfiltered_collapse = true},
+       Deallocate{.tracker_index = 4294967295, .alloc_index = 0},
+       GatherStatsPbtxt{}});
+}
 
 TEST(HugePageFillerTest, InstructionStringify) {
   {
