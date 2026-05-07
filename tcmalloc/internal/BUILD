@@ -603,6 +603,7 @@ cc_library(
         "//tcmalloc:__subpackages__",
     ],
     deps = [
+        ":bytes",
         ":config",
         "@com_google_absl//absl/types:span",
     ],

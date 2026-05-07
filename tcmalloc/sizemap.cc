@@ -158,7 +158,7 @@ bool SizeMap::SetSizeClasses(absl::Span<const SizeClassInfo> size_classes) {
   int curr = 1;
   for (int c = 1; c < num_classes; c++) {
     class_to_size_[curr] = size_classes[c].size;
-    class_to_pages_[curr] = size_classes[c].pages;
+    class_to_pages_[curr] = BytesToLengthFloor(size_classes[c].bytes).raw_num();
     num_objects_to_move_[curr] = size_classes[c].num_to_move;
     ++curr;
   }
@@ -194,14 +194,18 @@ bool SizeMap::ValidSizeClasses(absl::Span<const SizeClassInfo> size_classes) {
     num_classes = kNumBaseClasses;
   }
 
-  if (size_classes[0].size != 0 || size_classes[0].pages != 0 ||
+  if (size_classes[0].size != 0 || size_classes[0].bytes != Bytes(0) ||
       size_classes[0].num_to_move != 0) {
     return false;
   }
 
   for (int c = 1; c < num_classes; c++) {
     size_t class_size = size_classes[c].size;
-    Length pages = Length(size_classes[c].pages);
+    Length pages = BytesToLengthFloor(size_classes[c].bytes);
+    if (Bytes(pages.in_bytes()) != size_classes[c].bytes) {
+      TC_LOG("Non-page multiple span size %v: %v", c, size_classes[c].bytes);
+      return false;
+    }
     size_t num_objects_to_move = size_classes[c].num_to_move;
     // Each size class must be larger than the previous size class.
     if (class_size <= size_classes[c - 1].size) {

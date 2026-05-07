@@ -26,6 +26,7 @@
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "tcmalloc/common.h"
+#include "tcmalloc/internal/bytes.h"
 #include "tcmalloc/internal/config.h"
 #include "tcmalloc/internal/logging.h"
 #include "tcmalloc/internal/optimization.h"
@@ -200,8 +201,18 @@ inline constexpr Length BytesToLengthCeil(std::align_val_t bytes) {
 }
 
 TCMALLOC_ATTRIBUTE_CONST
+inline constexpr Length BytesToLengthCeil(Bytes bytes) {
+  return BytesToLengthCeil(bytes.raw_num());
+}
+
+TCMALLOC_ATTRIBUTE_CONST
 inline constexpr Length BytesToLengthFloor(size_t bytes) {
   return Length(bytes >> kPageShift);
+}
+
+TCMALLOC_ATTRIBUTE_CONST
+inline constexpr Length BytesToLengthFloor(Bytes bytes) {
+  return BytesToLengthFloor(bytes.raw_num());
 }
 
 inline constexpr Length kMaxValidPages = Length::max();

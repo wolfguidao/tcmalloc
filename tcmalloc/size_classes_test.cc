@@ -273,9 +273,9 @@ TEST_F(RunTimeSizeClassesTest, ExpandedSizeClasses) {
 TEST_F(RunTimeSizeClassesTest, ValidateClassSizeIncreases) {
   SizeClassInfo parsed[] = {
       {0, 0, 0},
-      {16, 1, 14},
-      {32, 1, 15},
-      {kMaxSize, kMaxSize / kPageSize, 15},
+      {16, kPageSize, 14},
+      {32, kPageSize, 15},
+      {kMaxSize, kMaxSize, 15},
   };
   EXPECT_TRUE(TestingSizeMap::ValidSizeClasses(parsed));
 
@@ -286,7 +286,7 @@ TEST_F(RunTimeSizeClassesTest, ValidateClassSizeIncreases) {
 TEST_F(RunTimeSizeClassesTest, ValidateClassSizeMax) {
   SizeClassInfo parsed[] = {
       {0, 0, 0},
-      {kMaxSize - 128, kMaxSize / kPageSize, 15},
+      {kMaxSize - 128, kMaxSize, 15},
   };
   // Last class must cover kMaxSize
   EXPECT_FALSE(TestingSizeMap::ValidSizeClasses(parsed));
@@ -302,8 +302,8 @@ TEST_F(RunTimeSizeClassesTest, ValidateClassSizeMax) {
 TEST_F(RunTimeSizeClassesTest, ValidateClassSizesAlignment) {
   SizeClassInfo parsed[] = {
       {0, 0, 0},
-      {8, 1, 14},
-      {kMaxSize, kMaxSize / kPageSize, 15},
+      {8, kPageSize, 14},
+      {kMaxSize, kMaxSize, 15},
   };
   EXPECT_TRUE(TestingSizeMap::ValidSizeClasses(parsed));
   // Doesn't meet alignment requirements
@@ -322,8 +322,8 @@ TEST_F(RunTimeSizeClassesTest, ValidateClassSizesAlignment) {
 TEST_F(RunTimeSizeClassesTest, ValidateBatchSize) {
   SizeClassInfo parsed[] = {
       {0, 0, 0},
-      {8, 1, kMaxObjectsToMove},
-      {kMaxSize, kMaxSize / kPageSize, 15},
+      {8, kPageSize, kMaxObjectsToMove},
+      {kMaxSize, kMaxSize, 15},
   };
   EXPECT_TRUE(TestingSizeMap::ValidSizeClasses(parsed));
 
@@ -334,12 +334,12 @@ TEST_F(RunTimeSizeClassesTest, ValidateBatchSize) {
 TEST_F(RunTimeSizeClassesTest, ValidatePageSize) {
   SizeClassInfo parsed[] = {
       {0, 0, 0},
-      {1024, 1, kMaxObjectsToMove},
-      {kMaxSize, kMaxSize / kPageSize, 15},
+      {1024, kPageSize, kMaxObjectsToMove},
+      {kMaxSize, kMaxSize, 15},
   };
   EXPECT_TRUE(TestingSizeMap::ValidSizeClasses(parsed));
 
-  parsed[1].pages = 255;
+  parsed[1].bytes = Bytes(Length(255).in_bytes());
   EXPECT_FALSE(TestingSizeMap::ValidSizeClasses(parsed));
 }
 

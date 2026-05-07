@@ -122,7 +122,8 @@ void FuzzCFL(size_t object_size, Length num_pages, size_t num_objects_to_move,
   if (!SizeMap::IsValidSizeClass(object_size, num_pages, num_objects_to_move)) {
     return;
   }
-  CentralFreelistEnv env(object_size, num_pages, num_objects_to_move);
+  CentralFreelistEnv env(object_size, Bytes(num_pages.in_bytes()),
+                         num_objects_to_move);
   std::vector<void*> objects;
 
   for (const auto& instruction_wrapper : instructions) {

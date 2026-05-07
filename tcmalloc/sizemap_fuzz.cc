@@ -26,9 +26,21 @@
 namespace tcmalloc::tcmalloc_internal {
 namespace {
 
-void FuzzSizeMap(const std::vector<SizeClassInfo>& info) {
-  if (info.empty()) {
+struct FuzzSizeClassInfo {
+  uint32_t size;
+  uint32_t pages;
+  uint8_t num_to_move;
+};
+
+void FuzzSizeMap(const std::vector<FuzzSizeClassInfo>& fuzz_info) {
+  if (fuzz_info.empty()) {
     return;
+  }
+
+  std::vector<SizeClassInfo> info;
+  for (const auto& f : fuzz_info) {
+    info.push_back(
+        SizeClassInfo(f.size, Length(f.pages).in_bytes(), f.num_to_move));
   }
 
   SizeMap m;

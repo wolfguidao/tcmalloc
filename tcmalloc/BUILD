@@ -288,6 +288,7 @@ create_tcmalloc_libraries(
         ":malloc_tracing_extension",
         "//tcmalloc/internal:allocation_guard",
         "//tcmalloc/internal:atomic_stats_counter",
+        "//tcmalloc/internal:bytes",
         "//tcmalloc/internal:cache_topology",
         "//tcmalloc/internal:central_freelist_hooks",
         "//tcmalloc/internal:clock",
