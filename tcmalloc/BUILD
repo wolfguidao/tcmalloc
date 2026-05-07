@@ -771,7 +771,12 @@ cc_test(
 
 cc_test(
     name = "huge_page_filler_fuzz",
-    srcs = ["huge_page_filler_fuzz.cc"],
+    srcs = [
+        "huge_page_filler_fuzz.cc",
+        "testdata/huge_page_filler_fuzz/clusterfuzz_testcase_minimized_huge_page_filler_fuzz_5161409228701696_test.inc",
+        "testdata/huge_page_filler_fuzz/clusterfuzz_testcase_minimized_huge_page_filler_fuzz_6053674183688192_test.inc",
+        "testdata/huge_page_filler_fuzz/clusterfuzz_testcase_minimized_huge_page_filler_fuzz_6622985612820480.inc",
+    ],
     args = [
         "--fuzztest_stack_limit_kb=2048",
     ],
