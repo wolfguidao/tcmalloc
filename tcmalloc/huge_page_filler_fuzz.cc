@@ -185,13 +185,17 @@ struct Release {
 
   template <typename Sink>
   friend void AbslStringify(Sink& sink, const Release& r) {
-    absl::Format(
-        &sink,
-        "Release{.hit_limit=%v, .use_peak_interval=%v, .peak_interval=%v, "
-        ".short_interval=%v, .long_interval=%v, .desired_pages=%d, "
-        ".release_partial_allocs=%v}",
-        r.hit_limit, r.use_peak_interval, r.peak_interval, r.short_interval,
-        r.long_interval, r.desired_pages, r.release_partial_allocs);
+    absl::Format(&sink,
+                 "Release{.hit_limit=%v, .use_peak_interval=%v, "
+                 ".peak_interval=absl::Nanoseconds(%v), "
+                 ".short_interval=absl::Nanoseconds(%v), "
+                 ".long_interval=absl::Nanoseconds(%v), .desired_pages=%d, "
+                 ".release_partial_allocs=%v}",
+                 r.hit_limit, r.use_peak_interval,
+                 absl::ToInt64Nanoseconds(r.peak_interval),
+                 absl::ToInt64Nanoseconds(r.short_interval),
+                 absl::ToInt64Nanoseconds(r.long_interval), r.desired_pages,
+                 r.release_partial_allocs);
   }
 };
 
@@ -200,21 +204,22 @@ struct AdvanceClock {
 
   template <typename Sink>
   friend void AbslStringify(Sink& sink, const AdvanceClock& a) {
-    absl::Format(&sink, "AdvanceClock{.amount=%v}", a.amount);
+    absl::Format(&sink, "AdvanceClock{.amount=absl::Nanoseconds(%v)}",
+                 absl::ToInt64Nanoseconds(a.amount));
   }
 };
 
 struct ToggleUnback {
   template <typename Sink>
   friend void AbslStringify(Sink& sink, const ToggleUnback&) {
-    sink.Append("ToggleUnback");
+    sink.Append("ToggleUnback{}");
   }
 };
 
 struct GatherStats {
   template <typename Sink>
   friend void AbslStringify(Sink& sink, const GatherStats&) {
-    sink.Append("GatherStats");
+    sink.Append("GatherStats{}");
   }
 };
 
@@ -239,14 +244,14 @@ struct MemoryLimitHitRelease {
 struct GatherStatsPbtxt {
   template <typename Sink>
   friend void AbslStringify(Sink& sink, const GatherStatsPbtxt&) {
-    sink.Append("GatherStatsPbtxt");
+    sink.Append("GatherStatsPbtxt{}");
   }
 };
 
 struct GatherSpanStats {
   template <typename Sink>
   friend void AbslStringify(Sink& sink, const GatherSpanStats&) {
-    sink.Append("GatherSpanStats");
+    sink.Append("GatherSpanStats{}");
   }
 };
 
@@ -289,7 +294,7 @@ struct UpdateBitmaps {
 struct ToggleCollapseSuccess {
   template <typename Sink>
   friend void AbslStringify(Sink& sink, const ToggleCollapseSuccess&) {
-    sink.Append("ToggleCollapseSuccess");
+    sink.Append("ToggleCollapseSuccess{}");
   }
 };
 
@@ -308,7 +313,8 @@ struct SetCollapseLatency {
 
   template <typename Sink>
   friend void AbslStringify(Sink& sink, const SetCollapseLatency& s) {
-    absl::Format(&sink, "SetCollapseLatency{.latency=%v}", s.latency);
+    absl::Format(&sink, "SetCollapseLatency{.latency=absl::Nanoseconds(%v)}",
+                 absl::ToInt64Nanoseconds(s.latency));
   }
 };
 
@@ -709,6 +715,95 @@ TEST(HugePageFillerTest, InstructionStringify) {
     std::string s = absl::StrFormat("%v", inst);
     EXPECT_EQ(s, "Deallocate{.tracker_index=3, .alloc_index=4}");
     EXPECT_THAT(s, Not(HasSubstr("<MAPPING_FUNCTION>")));
+  }
+  {
+    Instruction inst = AdvanceClock{.amount = absl::Seconds(1)};
+    std::string s = absl::StrFormat("%v", inst);
+    EXPECT_EQ(s, "AdvanceClock{.amount=absl::Nanoseconds(1000000000)}");
+  }
+  {
+    Instruction inst = ToggleUnback{};
+    std::string s = absl::StrFormat("%v", inst);
+    EXPECT_EQ(s, "ToggleUnback{}");
+  }
+  {
+    Instruction inst = Release{.hit_limit = true,
+                               .use_peak_interval = false,
+                               .peak_interval = absl::Seconds(1),
+                               .short_interval = absl::Seconds(2),
+                               .long_interval = absl::Seconds(3),
+                               .desired_pages = 4,
+                               .release_partial_allocs = true};
+    std::string s = absl::StrFormat("%v", inst);
+    EXPECT_EQ(s,
+              "Release{.hit_limit=true, .use_peak_interval=false, "
+              ".peak_interval=absl::Nanoseconds(1000000000), "
+              ".short_interval=absl::Nanoseconds(2000000000), "
+              ".long_interval=absl::Nanoseconds(3000000000), .desired_pages=4, "
+              ".release_partial_allocs=true}");
+  }
+  {
+    Instruction inst = GatherStats{};
+    std::string s = absl::StrFormat("%v", inst);
+    EXPECT_EQ(s, "GatherStats{}");
+  }
+  {
+    Instruction inst = ModelTail{.length = 5};
+    std::string s = absl::StrFormat("%v", inst);
+    EXPECT_EQ(s, "ModelTail{.length=5}");
+  }
+  {
+    Instruction inst = MemoryLimitHitRelease{.desired = 10};
+    std::string s = absl::StrFormat("%v", inst);
+    EXPECT_EQ(s, "MemoryLimitHitRelease{.desired=10}");
+  }
+  {
+    Instruction inst = GatherStatsPbtxt{};
+    std::string s = absl::StrFormat("%v", inst);
+    EXPECT_EQ(s, "GatherStatsPbtxt{}");
+  }
+  {
+    Instruction inst = GatherSpanStats{};
+    std::string s = absl::StrFormat("%v", inst);
+    EXPECT_EQ(s, "GatherSpanStats{}");
+  }
+  {
+    Instruction inst = TreatTrackers{.enable_collapse = true,
+                                     .enable_release_free_swap = false,
+                                     .use_userspace_collapse_heuristics = true,
+                                     .enable_unfiltered_collapse = false};
+    std::string s = absl::StrFormat("%v", inst);
+    EXPECT_EQ(
+        s,
+        "TreatTrackers{.enable_collapse=true, .enable_release_free_swap=false, "
+        ".use_userspace_collapse_heuristics=true, "
+        ".enable_unfiltered_collapse=false}");
+  }
+  {
+    Instruction inst = UpdateBitmaps{.hugepage_backed_set = true,
+                                     .hugepage_backed_val = false,
+                                     .unbacked_bitmap_val = 1,
+                                     .swapped_bitmap_val = 2};
+    std::string s = absl::StrFormat("%v", inst);
+    EXPECT_EQ(
+        s,
+        "UpdateBitmaps{.hugepage_backed_set=true, .hugepage_backed_val=false, "
+        ".unbacked_bitmap_val=1, .swapped_bitmap_val=2}");
+  }
+  {
+    Instruction inst = ToggleCollapseSuccess{};
+    std::string s = absl::StrFormat("%v", inst);
+    EXPECT_EQ(s, "ToggleCollapseSuccess{}");
+  }
+  {
+    Instruction inst = SetErrorNumber{.error_type = 1};
+    std::string s = absl::StrFormat("%v", inst);
+    EXPECT_EQ(s, "SetErrorNumber{.error_type=1}");
+  }
+  {
+    Instruction inst = SetCollapseLatency{.latency = absl::Seconds(5)};
+    std::string s = absl::StrFormat("%v", inst);
+    EXPECT_EQ(s, "SetCollapseLatency{.latency=absl::Nanoseconds(5000000000)}");
   }
 }
 
