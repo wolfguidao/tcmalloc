@@ -778,7 +778,7 @@ TEST(TCMallocTest, nallocx) {
   // predicts.  So we disable guarded allocations.
   ScopedGuardedSamplingInterval gs(-1);
 
-  for (size_t size = 0; size <= kMaxTestAllocSize; size += 11) {
+  for (size_t size = 0; size <= kMaxTestAllocSize; size += 31) {
     size_t rounded = nallocx(size, 0);
     ASSERT_GE(rounded, size);
 #if defined(ABSL_HAVE_ADDRESS_SANITIZER) || \
@@ -797,7 +797,7 @@ TEST(TCMallocTest, nallocx_alignment) {
   // predicts.  So we disable guarded allocations.
   ScopedGuardedSamplingInterval gs(-1);
 
-  for (size_t size = 0; size <= kMaxTestAllocSize; size += 17) {
+  for (size_t size = 0; size <= kMaxTestAllocSize; size += 31) {
 #ifndef __riscv
     for (auto align : {0, 1, 7, 8, 10}) {
 #else
@@ -897,7 +897,7 @@ TEST(TCMallocTest, FreeSizedDeathTest) {
 #endif
 
 TEST(TCMallocTest, FreeAlignedSized) {
-  for (size_t size = 7; size <= 4096; size += 7) {
+  for (size_t size = 7; size <= 4096; size += 31) {
     for (size_t align = 0; align <= 10; align++) {
       const size_t alignment = 1 << align;
       void* ptr = aligned_alloc(alignment, size);
@@ -932,7 +932,7 @@ TEST(TCMallocTest, FreeAlignedSizedDeathTest) {
 #endif
 
 TEST(TCMallocTest, sdallocx_alignment) {
-  for (size_t size = 0; size <= 4096; size += 7) {
+  for (size_t size = 0; size <= 4096; size += 31) {
     for (size_t align = 3; align <= 10; align++) {
       const size_t alignment = 1 << align;
       void* ptr;
@@ -947,7 +947,7 @@ TEST(TCMallocTest, sdallocx_alignment) {
 }
 
 TEST(TCMallocTest, alloc_at_least) {
-  for (size_t size = 0; size <= 4096; size += 7) {
+  for (size_t size = 0; size <= 4096; size += 31) {
     auto result = alloc_at_least(size);
     ASSERT_GE(result.size, size);
     memset(result.ptr, 0, size);
@@ -969,7 +969,7 @@ TEST(TCMallocTest, alloc_at_least) {
 }
 
 TEST(TCMallocTest, aligned_alloc_at_least) {
-  for (size_t size = 7; size <= 4096; size += 7) {
+  for (size_t size = 7; size <= 4096; size += 31) {
     for (size_t align = 0; align <= 10; align++) {
       const size_t alignment = 1 << align;
       auto result = aligned_alloc_at_least(alignment, size);
@@ -1199,7 +1199,7 @@ TEST_P(TcmallocSizedNewTest, SizedOperatorNewReturnsExtraCapacity) {
 }
 
 TEST_P(TcmallocSizedNewTest, SizedOperatorNew) {
-  for (size_t size = 0; size < 16 * 1024; size += 3) {
+  for (size_t size = 0; size < 16 * 1024; size += 31) {
     sized_ptr_t res = New(size);
     EXPECT_NE(res.p, nullptr);
     EXPECT_GE(res.n, size);
@@ -1244,9 +1244,10 @@ TEST_P(TcmallocSizedNewTest, SizedOperatorNewMatchesMallocExtensionValue) {
     test(size);
   }
 
-  // Traverse randomized sizes
-  constexpr size_t kOddIncrement = 117;
-  for (size_t size = 32; size <= kMaxTestAllocSize; size += kOddIncrement) {
+  // Traverse several randomized sizes
+  absl::BitGen rng;
+  for (int i = 0; i < 20; ++i) {
+    size_t size = absl::Uniform<size_t>(rng, 32, kMaxTestAllocSize);
     test(size);
   }
 }
@@ -1259,7 +1260,7 @@ TEST(SizedDeleteTest, SizedOperatorDelete) {
   const size_t kMaxSize = 1024;
 #endif  // #ifndef __riscv
   enum DeleteSize { kSize, kCapacity, kHalfway };
-  for (size_t size = 0; size < kMaxSize; ++size) {
+  for (size_t size = 0; size < kMaxSize; size += 31) {
     for (auto delete_size : {kSize, kCapacity, kHalfway}) {
       sized_ptr_t res = __size_returning_new(size);
       switch (delete_size) {

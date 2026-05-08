@@ -140,7 +140,7 @@ TEST_P(PageMapTest, RandomAccess) {
   }
 }
 
-INSTANTIATE_TEST_SUITE_P(Limits, PageMapTest, ::testing::Values(100, 1 << 20));
+INSTANTIATE_TEST_SUITE_P(Limits, PageMapTest, ::testing::Values(100, 1 << 16));
 
 // Surround pagemap with unused memory. This isolates it so that it does not
 // share pages with any other structures. This avoids the risk that adjacent

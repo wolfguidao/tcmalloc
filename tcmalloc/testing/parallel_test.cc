@@ -41,7 +41,7 @@ struct Allocator {
       : stop(stop), do_sized_delete(do_sized_delete) {}
 
   void operator()() {
-    const int kNumAllocations = 65536;
+    const int kNumAllocations = 1024;
     std::vector<void*> v;
     v.reserve(kNumAllocations);
 

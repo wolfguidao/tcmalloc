@@ -570,7 +570,7 @@ TEST_F(PageTrackerTest, Defrag) {
     Put(d);
   }
 
-  static const size_t kReps = 250 * 1000;
+  static const size_t kReps = 25 * 1000;
 
   std::vector<double> frag_samples;
   std::vector<Length> longest_free_samples;

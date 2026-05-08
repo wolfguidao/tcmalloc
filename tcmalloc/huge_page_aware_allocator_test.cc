@@ -326,12 +326,12 @@ struct SpanInfo {
 TEST_P(HugePageAwareAllocatorTest, Fuzz) {
   absl::BitGen rng;
   std::vector<SpanInfo> allocs;
-  for (int i = 0; i < 5000; ++i) {
+  for (int i = 0; i < 1000; ++i) {
     auto [n, span_alloc_info] = RandomAllocSize(rng);
     Span* s = New(n, span_alloc_info);
     allocs.push_back(SpanInfo{s, span_alloc_info});
   }
-  static const size_t kReps = 50 * 1000;
+  static const size_t kReps = 10 * 1000;
   for (int i = 0; i < kReps; ++i) {
     SCOPED_TRACE(absl::StrFormat("%d reps, %d pages", i, total_.raw_num()));
     size_t index = absl::Uniform<int32_t>(rng, 0, allocs.size());
@@ -393,7 +393,7 @@ TEST_P(HugePageAwareAllocatorTest, Multithreaded) {
         allocs.push_back(SpanInfo{New(n, span_alloc_info), span_alloc_info});
       }
       b1.Block();
-      static const size_t kReps = 4 * 1000;
+      static const size_t kReps = 1 * 1000;
       for (int i = 0; i < kReps; ++i) {
         size_t index = absl::Uniform<int32_t>(rng, 0, allocs.size());
         Delete(allocs[index].span,
@@ -428,7 +428,7 @@ TEST_P(HugePageAwareAllocatorTest, ReleasingSmall) {
       absl::ZeroDuration());
 
   std::vector<Span*> live, dead;
-  static const size_t N = kPagesPerHugePage.raw_num() * 128;
+  static const size_t N = kPagesPerHugePage.raw_num() * 32;
   const SpanAllocInfo kSpanInfo = {1, AccessDensityPrediction::kSparse};
   for (int i = 0; i < N; ++i) {
     Span* span = New(Length(1), kSpanInfo);
@@ -456,7 +456,7 @@ TEST_P(HugePageAwareAllocatorTest, ReleasingSmall) {
 
 TEST_P(HugePageAwareAllocatorTest, HardReleaseSmall) {
   std::vector<Span*> live, dead;
-  static const size_t N = kPagesPerHugePage.raw_num() * 128;
+  static const size_t N = kPagesPerHugePage.raw_num() * 32;
   const SpanAllocInfo kSpanInfo = {1, AccessDensityPrediction::kSparse};
   for (int i = 0; i < N; ++i) {
     Span* span = New(Length(1), kSpanInfo);

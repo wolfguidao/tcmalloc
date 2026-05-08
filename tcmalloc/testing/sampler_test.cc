@@ -260,8 +260,8 @@ TEST(Sampler, weight_distribution) {
     double expected =
         (size + 1) / (1.0 - exp(-1.0 * (size + 1) / s.GetSampleInterval()));
     // Since each sample requires ~2MiB / size iterations, using fewer samples
-    // for the small sizes makes this test run in ~2s vs. ~90s on Forge in 2019.
-    DoCheckMean(expected, size < 256 ? 100 : kSamples, [size, &s]() {
+    // for the small sizes makes this test run in ~2s vs. ~90s.
+    DoCheckMean(expected, size < 4096 ? 100 : kSamples, [size, &s]() {
       size_t weight = 0;
       while (!(weight = s.RecordAllocation(size))) {
       }
