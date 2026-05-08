@@ -228,6 +228,9 @@ ABSL_ATTRIBUTE_NOINLINE sized_ptr_t SampleifyAllocation(
       .ptr = (alloc_with_status.alloc != nullptr)
                  ? alloc_with_status.alloc
                  : stack_trace.span_start_address,
+      .access_hint = stack_trace.access_hint,
+      .access_allocated = stack_trace.cold_allocated ? MallocHook::Access::Cold
+                                                     : MallocHook::Access::Hot,
   };
   MallocHook::InvokeSampledNewHook(sampled_alloc);
 
@@ -413,6 +416,10 @@ void MaybeUnsampleAllocation(Static& state, Policy policy,
                               sampled_allocation->sampled_stack.depth),
       .allocation_time = sampled_allocation->sampled_stack.allocation_time,
       .ptr = ptr,
+      .access_hint = sampled_allocation->sampled_stack.access_hint,
+      .access_allocated = sampled_allocation->sampled_stack.cold_allocated
+                              ? MallocHook::Access::Cold
+                              : MallocHook::Access::Hot,
   };
   state.sampled_allocation_recorder().Unregister(sampled_allocation);
 

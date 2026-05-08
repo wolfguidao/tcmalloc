@@ -21,6 +21,7 @@
 #include <optional>
 #include <string>
 
+#include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "absl/time/clock.h"
 #include "absl/time/time.h"
@@ -49,6 +50,8 @@ size_t last_requested_size;
 std::optional<std::align_val_t> last_requested_alignment;
 const void* last_ptr;
 absl::Time last_alloc_time;
+uint8_t last_access_hint;
+MallocHook::Access last_access_allocated;
 
 void TestSampledNewHook(const MallocHook::SampledAlloc& sampled_alloc) {
   if (!hooks_enabled) {
@@ -72,6 +75,8 @@ void TestSampledNewHook(const MallocHook::SampledAlloc& sampled_alloc) {
   last_requested_size = sampled_alloc.requested_size;
   last_ptr = sampled_alloc.ptr;
   last_alloc_time = sampled_alloc.allocation_time;
+  last_access_hint = sampled_alloc.access_hint;
+  last_access_allocated = sampled_alloc.access_allocated;
 }
 
 void TestSampledDeleteHook(
@@ -96,6 +101,8 @@ class SampledHooksTest : public ::testing::Test {
     min_weight = std::numeric_limits<double>::infinity();
     max_weight = -std::numeric_limits<double>::infinity();
     unsampled_total_allocated_size = 0;
+    last_access_hint = 0;
+    last_access_allocated = MallocHook::Access::Hot;
     ASSERT_TRUE(MallocHook::AddSampledNewHook(&TestSampledNewHook));
     ASSERT_TRUE(MallocHook::AddSampledDeleteHook(&TestSampledDeleteHook));
   }
@@ -112,6 +119,12 @@ class SampledHooksTest : public ::testing::Test {
   void* AllocateAligned(size_t bytes, size_t alignment) {
     hooks_enabled = true;
     void* p = ::operator new(bytes, std::align_val_t(alignment));
+    hooks_enabled = false;
+    return p;
+  }
+  void* AllocateWithHint(size_t bytes, tcmalloc::hot_cold_t hint) {
+    hooks_enabled = true;
+    void* p = ::operator new(bytes, hint);
     hooks_enabled = false;
     return p;
   }
@@ -218,6 +231,25 @@ TEST_F(SampledHooksTest, RequestedSizeAndAlignment) {
   EXPECT_EQ(24, last_requested_size);
   EXPECT_EQ(std::align_val_t{16}, last_requested_alignment);
   DeallocateAligned(p, 24, 16);
+}
+
+TEST_F(SampledHooksTest, AccessHintAndAllocated) {
+  ScopedProfileSamplingInterval i(1);
+
+  // 1. Cold Hint
+  void* p = AllocateWithHint(64, tcmalloc::hot_cold_t{0});
+  EXPECT_EQ(0, last_access_hint);
+  // The allocator may place cold hints into the Hot partition under some
+  // circumstances (e.g. heap partitioning disabled or unsupported).
+  EXPECT_THAT(last_access_allocated, testing::AnyOf(MallocHook::Access::Hot,
+                                                    MallocHook::Access::Cold));
+  Deallocate(p, 64);
+
+  // 2. Hot Hint
+  p = AllocateWithHint(64, tcmalloc::hot_cold_t{255});
+  EXPECT_EQ(255, last_access_hint);
+  EXPECT_EQ(last_access_allocated, MallocHook::Access::Hot);
+  Deallocate(p, 64);
 }
 
 TEST_F(SampledHooksTest, AlwaysSampledAndGuarded) {

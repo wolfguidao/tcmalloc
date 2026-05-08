@@ -96,10 +96,20 @@ class MallocHook final {
   //
   //  * const void* ptr: the address of the allocated memory.
   //
+  //  * uint8_t access_hint: the access frequency hint provided to TCMalloc.
+  //    This is the raw value of hot_cold_t.
+  //
+  //  * Access access_allocated: the actual partition (Hot or Cold) where
+  //    the memory was allocated.
+  //
   // The allocator invoking the hook has all the fields in `SampledAlloc` stored
   // and later call InvokeSampledDeleteHook() with a `SampledAlloc` struct
   // populated by those fields.
   enum class AllocHandle : int64_t {};
+  enum class Access : uint8_t {
+    Hot,
+    Cold,
+  };
   struct SampledAlloc final {
     const AllocHandle handle;
     const size_t requested_size;
@@ -109,6 +119,8 @@ class MallocHook final {
     const absl::Span<const void* const> stack;
     const absl::Time allocation_time;
     const void* ptr;
+    const uint8_t access_hint;
+    const Access access_allocated;
   };
   typedef void (*SampledNewHook)(const SampledAlloc& sampled_alloc);
   [[nodiscard]] static bool AddSampledNewHook(SampledNewHook hook);
