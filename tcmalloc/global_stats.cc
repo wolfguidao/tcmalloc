@@ -761,6 +761,8 @@ void DumpStatsInPbtxt(Printer& out, int level) {
       tc_globals.central_freelist(size_class)
           .PrintSpanLifetimeStatsInPbtxt(entry);
       tc_globals.central_freelist(size_class).PrintNumSpansUsedInPbtxt(entry);
+      tc_globals.central_freelist(size_class)
+          .PrintLongLivedSpansMovedInPbtxt(entry);
     }
 
     tc_globals.transfer_cache().PrintInPbtxt(tc_globals.per_size_class_counts(),
