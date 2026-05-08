@@ -701,7 +701,43 @@ auto GetInstructionDomain() {
 FUZZ_TEST(HugePageFillerTest, FuzzFiller)
     .WithDomains(fuzztest::VectorOf(GetInstructionDomain()).WithMaxSize(20000));
 
-TEST(HugePageFillerTest, FuzzFillerRegression) { FuzzFiller({}); }
+TEST(HugePageFillerTest, b510326948) {
+  FuzzFiller(
+      {SetCollapseLatency{.latency = absl::Nanoseconds(9223372036854775807)},
+       SetErrorNumber{.error_type = 115},
+       UpdateBitmaps{.hugepage_backed_set = false,
+                     .hugepage_backed_val = false,
+                     .unbacked_bitmap_val = 65535,
+                     .swapped_bitmap_val = 1},
+       UpdateBitmaps{.hugepage_backed_set = true,
+                     .hugepage_backed_val = false,
+                     .unbacked_bitmap_val = 1,
+                     .swapped_bitmap_val = 1},
+       ToggleCollapseSuccess{},
+       Allocate{
+           .length = 32767, .num_objects = 2147483647, .density_dense = false},
+       TreatTrackers{.enable_collapse = true,
+                     .enable_release_free_swap = true,
+                     .use_userspace_collapse_heuristics = false,
+                     .enable_unfiltered_collapse = false},
+       Deallocate{.tracker_index = 2147483647, .alloc_index = 2147483647},
+       ModelTail{.length = 4096},
+       Allocate{
+           .length = 40147, .num_objects = 2790469646, .density_dense = true},
+       Allocate{.length = 65535, .num_objects = 1, .density_dense = false},
+       Allocate{
+           .length = 65535, .num_objects = 4294967295, .density_dense = false},
+       Allocate{.length = 41298, .num_objects = 1, .density_dense = false},
+       Allocate{
+           .length = 24021, .num_objects = 2147483647, .density_dense = true},
+       SetCollapseLatency{.latency = absl::Nanoseconds(0)},
+       ModelTail{.length = 0},
+       ToggleUnback{},
+       AdvanceClock{.amount = absl::Nanoseconds(1237243357567017495)},
+       ModelTail{.length = 31734},
+       SetCollapseLatency{.latency = absl::Nanoseconds(1)},
+       GatherStats{}});
+}
 
 TEST(
     HugePageFillerTest,
