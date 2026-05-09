@@ -993,6 +993,11 @@ TEST_P(StressThreadTest, Stress) {
     return;
   }
 
+  // TODO(b/511288589): Remove once the bug is fixed.
+#if defined(HWADDRESS_SANITIZER)
+  GTEST_SKIP() << "Skipping percpu stress test on HWASan.";
+#endif
+
   const bool resize = std::get<0>(GetParam());
   const bool pin_cpu = std::get<1>(GetParam());
 

@@ -368,7 +368,9 @@ class SampledAllocationWithFilterTest
 #endif
     // Sanitizers override malloc/free with their own.
 #if defined(ABSL_HAVE_ADDRESS_SANITIZER) || \
-    defined(ABSL_HAVE_MEMORY_SANITIZER) || defined(ABSL_HAVE_THREAD_SANITIZER)
+    defined(ABSL_HAVE_MEMORY_SANITIZER) ||  \
+    defined(ABSL_HAVE_THREAD_SANITIZER) ||  \
+    defined(ABSL_HAVE_HWADDRESS_SANITIZER)
     GTEST_SKIP() << "skipping tests on sanitizers";
 #endif
   }
