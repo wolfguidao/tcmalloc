@@ -380,8 +380,6 @@ void FenceCpu(int vcpu) {
   }
 
   if (UsingRseqVirtualCpus()) {
-    ASSUME(false);
-
     // With virtual CPUs, we cannot identify the true physical core we need to
     // interrupt.
     FenceAllCpus();
