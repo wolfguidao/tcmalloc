@@ -4748,6 +4748,118 @@ HugePageFiller: 130 of sparsely-accessed regular used native pages are unbacked.
   DeleteVector(p2);
 }
 
+TEST_F(FillerTest, ResidencyTelemetryPartiallyReleased) {
+  if (kPagesPerHugePage != Length(256)) {
+    return;
+  }
+
+  const Length kAlloc = kPagesPerHugePage / 2;
+
+  SpanAllocInfo sparsely_accessed_info = {1, AccessDensityPrediction::kSparse};
+
+  // Step 1: Allocate three spans sequentially from the same tracker (pt1).
+  // Total allocations (129) will fit in one sparsely-accessed regular hugepage.
+  std::vector<PAlloc> p1_a =
+      AllocateVectorWithSpanAllocInfo(Length(10), sparsely_accessed_info);
+  std::vector<PAlloc> p1_b =
+      AllocateVectorWithSpanAllocInfo(Length(10), sparsely_accessed_info);
+  std::vector<PAlloc> p1_c = AllocateVectorWithSpanAllocInfo(
+      kAlloc + Length(1) - Length(20), sparsely_accessed_info);
+
+  // Allocate p2 on a second hugepage (which will be hugepage backed).
+  std::vector<PAlloc> p2 = AllocateVectorWithSpanAllocInfo(
+      kAlloc + Length(2), sparsely_accessed_info);
+
+  ASSERT_TRUE(!p1_a.empty());
+  ASSERT_TRUE(!p1_b.empty());
+  ASSERT_TRUE(!p1_c.empty());
+  ASSERT_TRUE(!p2.empty());
+
+  // Verify that p1 allocations are in the same page tracker (same hugepage).
+  PageTracker* pt1 = p1_a.front().pt;
+  ASSERT_EQ(p1_b.front().pt, pt1);
+  ASSERT_EQ(p1_c.front().pt, pt1);
+
+  FakePageFlags pageflags;
+  FakeResidency residency;
+
+  // Mark pt1's hugepage as non-hugepage backed.
+  pageflags.MarkHugePageBacked(pt1->location().start_addr(),
+                               /*is_hugepage_backed=*/false);
+  EXPECT_FALSE(
+      pageflags.IsHugepageBacked(pt1->location().start_addr()).value());
+
+  // Mock OS residency unbacked/swapped range [128, 384) native pages (TCMalloc
+  // pages [64, 192)).
+  Bitmap<kMaxResidencyBits> unbacked, swapped;
+  unbacked.SetRange(/*index=*/kMaxResidencyBits / 4, kMaxResidencyBits / 2);
+  swapped.SetRange(/*index=*/kMaxResidencyBits / 4, kMaxResidencyBits / 2);
+  residency.SetUnbackedAndSwappedBitmaps(pt1->location().start_addr(), unbacked,
+                                         swapped);
+
+  // Mark pt2's hugepage as hugepage backed.
+  for (const auto& pa : p2) {
+    pageflags.MarkHugePageBacked(pa.p.start_addr(),
+                                 /*is_hugepage_backed=*/true);
+    EXPECT_TRUE(pageflags.IsHugepageBacked(pa.p.start_addr()).value());
+  }
+
+  ASSERT_EQ(filler_.size(), NHugePages(2));
+
+  // Step 2: Treat hugepage trackers while pt1 is REGULAR to collect its
+  // residency state in TCMalloc telemetry records.
+  TreatHugepageTrackers(/*enable_collapse=*/true,
+                        /*enable_release_free_swapped=*/false,
+                        /*use_userspace_collapse_heuristics=*/false,
+                        EnableUnfilteredCollapse::kDisabled, &pageflags,
+                        &residency);
+
+  // Step 3: Free p1_a (10 pages) and subrelease it to the OS.
+  // This marks these 10 pages as released (unmapped).
+  // The tracker now has: 119 pages used, 10 pages free (all 10 released).
+  DeleteVector(p1_a);
+  ReleasePages(Length(10));
+
+  // Step 4: Free p1_b (10 pages) WITHOUT subreleasing.
+  // The tracker now has: 109 pages used, 20 pages free (10 released, 10 backed
+  // free). Since it has both released pages and backed free pages, it is now
+  // PARTIALLY RELEASED.
+  DeleteVector(p1_b);
+
+  std::string buffer_text = PrintToString(1024 * 1024, [&](Printer& printer) {
+    PageHeapSpinLockHolder l;
+    filler_.Print(printer, /*everything=*/true, pageflags);
+  });
+
+  // Step 5: Verify residency telemetry stats in text format.
+  // pt1 stats are now printed under "sparsely-accessed partial released".
+  // pt2 (which is regular and hugepage backed) stats should be under
+  // "sparsely-accessed regular".
+  EXPECT_THAT(buffer_text, testing::HasSubstr(R"(
+HugePageFiller: Of the non-hugepage backed pages of type sparsely-accessed partial released, 10 tcmalloc pages are free, 109 tcmalloc pages are used.
+)"));
+
+  EXPECT_THAT(buffer_text, testing::HasSubstr(R"(
+HugePageFiller: Of the non-hugepage backed pages of type sparsely-accessed regular, 0 tcmalloc pages are free, 0 tcmalloc pages are used.
+)"));
+
+  // Step 6: Verify residency telemetry stats in Pbtxt format.
+  std::string buffer_pbtxt =
+      PrintToString(1024 * 1024, [&](PbtxtRegion& region) {
+        PageHeapSpinLockHolder l;
+        filler_.PrintInPbtxt(region, pageflags);
+      });
+
+  EXPECT_THAT(buffer_pbtxt,
+              testing::HasSubstr("num_free_pages_non_hugepage_backed: 10"));
+  EXPECT_THAT(buffer_pbtxt,
+              testing::HasSubstr("num_used_pages_non_hugepage_backed: 109"));
+
+  // Step 7: Cleanup remaining allocations.
+  DeleteVector(p1_c);
+  DeleteVector(p2);
+}
+
 TEST_F(FillerTest, PrintHugepageBackedStats) {
   const Length kAlloc = kPagesPerHugePage / 2;
   randomize_density_ = false;

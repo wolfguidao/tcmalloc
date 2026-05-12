@@ -655,12 +655,13 @@ class UsageInfo {
     PageTracker::HugePageResidencyState hugepage_residency_state =
         pt.GetHugePageResidencyState();
     if (hugepage_residency_state.entry_valid) {
+      TC_ASSERT_GE(free, pt.released_pages());
       ++records.treated_hugepages;
       if (hugepage_residency_state.maybe_hugepage_backed) {
-        records.num_free_hugepage_backed += free;
+        records.num_free_hugepage_backed += (free - pt.released_pages());
         records.num_used_hugepage_backed += pt.used_pages();
       } else {
-        records.num_free_non_hugepage_backed += free;
+        records.num_free_non_hugepage_backed += (free - pt.released_pages());
         records.num_used_non_hugepage_backed += pt.used_pages();
         Residency::SinglePageBitmaps bitmaps = hugepage_residency_state.bitmaps;
         ++records.unbacked_histo[NativePageBucketNum(
