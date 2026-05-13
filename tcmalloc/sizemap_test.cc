@@ -57,16 +57,31 @@ TEST(ColdSizeClassTest, ColdSizeClasses) {
 
   SizeMap size_map;
   EXPECT_TRUE(size_map.Init(classes));
+  constexpr size_t kPartition1ColdSizeClassOffset =
+      kNumBaseClasses * kSecurityPartitions;
   for (const size_t request_size : allowed_alloc_size) {
-    EXPECT_EQ(size_map.SizeClass(
-                  CppPolicy().WithSecurityToken<TokenId{0}>().AccessAsCold(),
-                  request_size),
-              size_map.SizeClass(
-                  CppPolicy().WithSecurityToken<TokenId{0}>().AccessAsHot(),
-                  request_size) +
-                  (tc_globals.numa_topology().GetCurrentPartition() == 0
-                       ? kExpandedClassesStart
-                       : kNumBaseClasses));
+    EXPECT_EQ(size_map.SizeClass(CppPolicy()
+                                     .InPartition(0)
+                                     .WithSecurityToken<TokenId{0}>()
+                                     .AccessAsCold(),
+                                 request_size),
+              size_map.SizeClass(CppPolicy()
+                                     .InPartition(0)
+                                     .WithSecurityToken<TokenId{0}>()
+                                     .AccessAsHot(),
+                                 request_size) +
+                  kExpandedClassesStart);
+    EXPECT_EQ(size_map.SizeClass(CppPolicy()
+                                     .InPartition(1)
+                                     .WithSecurityToken<TokenId{0}>()
+                                     .AccessAsCold(),
+                                 request_size),
+              size_map.SizeClass(CppPolicy()
+                                     .InPartition(1)
+                                     .WithSecurityToken<TokenId{0}>()
+                                     .AccessAsHot(),
+                                 request_size) +
+                  kPartition1ColdSizeClassOffset);
   }
   EXPECT_THAT(size_map.ColdSizeClasses(),
               ElementsAreArray(expected_cold_size_classes));
@@ -83,16 +98,32 @@ TEST(ColdSizeClassTest, VerifyAllocationFullRange) {
 
   // Confirm that sizes are allocated as cold as requested.
   size_t max_size = classes[classes.size() - 1].size;
+  constexpr size_t kPartition1ColdSizeClassOffset =
+      kNumBaseClasses * kSecurityPartitions;
   for (int request_size = 1; request_size <= max_size; ++request_size) {
-    EXPECT_EQ(size_map.SizeClass(
-                  CppPolicy().WithSecurityToken<TokenId{0}>().AccessAsCold(),
-                  request_size),
-              size_map.SizeClass(
-                  CppPolicy().WithSecurityToken<TokenId{0}>().AccessAsHot(),
-                  request_size) +
-                  (tc_globals.numa_topology().GetCurrentPartition() == 0
-                       ? kExpandedClassesStart
-                       : kNumBaseClasses))
+    EXPECT_EQ(size_map.SizeClass(CppPolicy()
+                                     .InPartition(0)
+                                     .WithSecurityToken<TokenId{0}>()
+                                     .AccessAsCold(),
+                                 request_size),
+              size_map.SizeClass(CppPolicy()
+                                     .InPartition(0)
+                                     .WithSecurityToken<TokenId{0}>()
+                                     .AccessAsHot(),
+                                 request_size) +
+                  kExpandedClassesStart)
+        << request_size;
+    EXPECT_EQ(size_map.SizeClass(CppPolicy()
+                                     .InPartition(1)
+                                     .WithSecurityToken<TokenId{0}>()
+                                     .AccessAsCold(),
+                                 request_size),
+              size_map.SizeClass(CppPolicy()
+                                     .InPartition(1)
+                                     .WithSecurityToken<TokenId{0}>()
+                                     .AccessAsHot(),
+                                 request_size) +
+                  kPartition1ColdSizeClassOffset)
         << request_size;
   }
 }
