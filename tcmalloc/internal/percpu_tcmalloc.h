@@ -473,7 +473,7 @@ inline size_t TcmallocSlab<NumClasses>::Capacity(int cpu,
   "_%=\n"                                              \
   "add %[scratch], %[scratch], :lo12:__rseq_cs_" #name \
   "_%=\n"                                              \
-  "str %[scratch], [%[sampler_addr], %c[rseq_cs_offset]]\n"
+  "str %[scratch], %[rseq_cs_addr]\n"
 #endif  // defined(__aarch64__)
 
 #if !defined(__clang_major__) || __clang_major__ >= 9
@@ -542,15 +542,13 @@ inline size_t TcmallocSlab<NumClasses>::Capacity(int cpu,
 // faster than doing independent TLS references for Arm.
 #define TCMALLOC_RSEQ_INPUTS                                                 \
   [sampler_addr] "r"(subtle::percpu::GetThreadSamplerAddress()),             \
+      [rseq_cs_addr] "m"(__rseq_abi.rseq_cs),                                \
       [rseq_sig] "n"(                                                        \
           TCMALLOC_PERCPU_RSEQ_SIGNATURE), /* Also pass common consts, there \
                                               is no cost to passing unused   \
                                               consts. */                     \
       [cached_slabs_bit] "n"(TCMALLOC_CACHED_SLABS_BIT),                     \
-      [rseq_slabs_offset] "n"(TCMALLOC_RSEQ_SAMPLER_OFFSET +                 \
-                              TCMALLOC_RSEQ_SLABS_OFFSET),                   \
-      [rseq_cs_offset] "n"(TCMALLOC_RSEQ_SAMPLER_OFFSET +                    \
-                           TCMALLOC_RSEQ_CS_OFFSET)
+      [sampler_slabs_offset] "n"(TCMALLOC_SAMPLER_SLABS_OFFSET)
 #else
 #define TCMALLOC_RSEQ_INPUTS                                                 \
   [rseq_cs_addr] "m"(__rseq_abi.rseq_cs),                                    \
@@ -591,7 +589,7 @@ inline ABSL_ATTRIBUTE_ALWAYS_INLINE bool StoreCurrentCpu(volatile void* p,
     asm(TCMALLOC_RSEQ_PROLOGUE(TcmallocSlab_Internal_StoreCurrentCpu)
             R"(
         mov %[scratch], #0
-        ldr %[tmp], [%[sampler_addr], #%c[rseq_slabs_offset]]
+        ldr %[tmp], [%[sampler_addr], #%c[sampler_slabs_offset]]
         tbz %[tmp], #%c[cached_slabs_bit], 5f
         mov %[scratch], #1
         str %[v], %[p]
@@ -605,7 +603,7 @@ inline ABSL_ATTRIBUTE_ALWAYS_INLINE bool StoreCurrentCpu(volatile void* p,
     asm(TCMALLOC_RSEQ_PROLOGUE(TcmallocSlab_Internal_StoreCurrentCpu)
             R"(
         mov %[scratch], #0
-        ldr %[tmp], [%[sampler_addr], #%c[rseq_slabs_offset]]
+        ldr %[tmp], [%[sampler_addr], #%c[sampler_slabs_offset]]
         tbz %[tmp], #%c[cached_slabs_bit], 5f
         mov %[scratch], #1
         str %w[v], %[p]
@@ -701,7 +699,7 @@ static inline ABSL_ATTRIBUTE_ALWAYS_INLINE bool TcmallocSlab_Internal_Push(
 #endif
       TCMALLOC_RSEQ_PROLOGUE(TcmallocSlab_Internal_Push)
       // region_start = tcmalloc_slabs;
-      "ldr %[region_start], [%[sampler_addr], #%c[rseq_slabs_offset]]\n"
+      "ldr %[region_start], [%[sampler_addr], #%c[sampler_slabs_offset]]\n"
   // if (region_start & TCMALLOC_CACHED_SLABS_MASK) goto overflow_label;
   // region_start is unmasked on aarch64, since Top Byte Ignore is enabled in
   // user space by default
@@ -901,7 +899,7 @@ inline ABSL_ATTRIBUTE_ALWAYS_INLINE void* TcmallocSlab<NumClasses>::Pop(
       TCMALLOC_RSEQ_PROLOGUE(TcmallocSlab_Internal_Pop)
       // region_start = tcmalloc_slabs;
 
-      "ldr %[region_start], [%[sampler_addr], #%c[rseq_slabs_offset]]\n"
+      "ldr %[region_start], [%[sampler_addr], #%c[sampler_slabs_offset]]\n"
   // if (region_start & TCMALLOC_CACHED_SLABS_MASK) goto overflow_label;
   // region_start is unmasked on aarch64, since Top Byte Ignore is enabled in
   // user space by default

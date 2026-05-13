@@ -155,8 +155,10 @@ static void InitPerCpu() {
     TC_CHECK_EQ(slabs_addr, rseq_abi_addr + TCMALLOC_RSEQ_SLABS_OFFSET);
     // Ensure Sampler is properly aligned.
     TC_CHECK_EQ(sampler_addr % TCMALLOC_SAMPLER_ALIGN, 0);
-    // Ensure that tcmalloc_sampler is located before tcmalloc_slabs.
-    TC_CHECK_LE(sampler_addr + TCMALLOC_SAMPLER_SIZE, slabs_addr);
+    // Ensure that tcmalloc_sampler and the tcmalloc_slabs are the expected
+    // distance apart. This is needed because we reference the slabs address
+    // relative to the sampler address with a fixed offset in inline assembly.
+    TC_CHECK_EQ(sampler_addr + TCMALLOC_SAMPLER_SLABS_OFFSET, slabs_addr);
 
     constexpr int kMEMBARRIER_CMD_REGISTER_PRIVATE_EXPEDITED_RSEQ = (1 << 8);
     // It is safe to make the syscall below multiple times.
