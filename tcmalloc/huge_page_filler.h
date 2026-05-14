@@ -236,6 +236,10 @@ class PageTracker : public TList<PageTracker>::Elem {
     bool being_collapsed = false;
     // Records swap and unbacked bitmaps for this hugepage.
     Residency::SinglePageBitmaps bitmaps;
+    // Records whether collapse was skipped due to threshold constraints.
+    bool collapse_skipped = false;
+    // Records whether collapse was skipped due to backoff.
+    bool collapse_skipped_due_to_backoff = false;
   };
 
   void SetHugePageResidencyState(const HugePageResidencyState& state) {
@@ -608,6 +612,8 @@ class UsageInfo {
     size_t treated_hugepages{};
     size_t hugepage_backed{};
     size_t total_pages{};
+    size_t collapse_skipped{};
+    size_t collapse_skipped_due_to_backoff{};
     Length num_free_non_hugepage_backed{};
     Length num_free_hugepage_backed{};
     Length num_used_non_hugepage_backed{};
@@ -657,6 +663,12 @@ class UsageInfo {
     if (hugepage_residency_state.entry_valid) {
       TC_ASSERT_GE(free, pt.released_pages());
       ++records.treated_hugepages;
+      if (hugepage_residency_state.collapse_skipped) {
+        ++records.collapse_skipped;
+      }
+      if (hugepage_residency_state.collapse_skipped_due_to_backoff) {
+        ++records.collapse_skipped_due_to_backoff;
+      }
       if (hugepage_residency_state.maybe_hugepage_backed) {
         records.num_free_hugepage_backed += (free - pt.released_pages());
         records.num_used_hugepage_backed += pt.used_pages();
@@ -759,6 +771,13 @@ class UsageInfo {
 
     out.printf("\nHugePageFiller: %zu of %s pages treated out of %zu.",
                records.treated_hugepages, TypeToStr(type), records.total_pages);
+    out.printf("\nHugePageFiller: %zu of %s pages skipped collapse out of %zu.",
+               records.collapse_skipped, TypeToStr(type), records.total_pages);
+    out.printf(
+        "\nHugePageFiller: %zu of %s pages skipped collapse due to backoff out "
+        "of %zu.",
+        records.collapse_skipped_due_to_backoff, TypeToStr(type),
+        records.total_pages);
 
     out.printf("\n");
     PrintSampledTrackers(out, type, records);
@@ -797,6 +816,9 @@ class UsageInfo {
     scoped.PrintI64("num_used_pages_hugepage_backed",
                     records.num_used_hugepage_backed.raw_num());
     scoped.PrintI64("num_pages_treated", records.treated_hugepages);
+    scoped.PrintI64("num_pages_collapse_skipped", records.collapse_skipped);
+    scoped.PrintI64("num_pages_collapse_skipped_due_to_backoff",
+                    records.collapse_skipped_due_to_backoff);
     scoped.PrintI64("num_pages_free_swapped",
                     records.num_free_swapped.raw_num());
     scoped.PrintI64("num_pages_used_swapped",
@@ -2606,7 +2628,12 @@ class HugePageUnbackedTrackerTreatment final : public HugePageTreatment {
                                       kMaxUnbackedPagesForCollapse);
           if (should_collapse) {
             state.maybe_hugepage_backed = TryUserspaceCollapse(tracker);
+          } else {
+            state.collapse_skipped = true;
           }
+        } else if (enable_collapse_ && backoff) {
+          state.collapse_skipped = true;
+          state.collapse_skipped_due_to_backoff = true;
         }
       }
       residency_states_[i].tracker = tracker;

@@ -4685,6 +4685,8 @@ HugePageFiller: <510<=     0 <511<=     0
 
   EXPECT_THAT(buffer_text, testing::HasSubstr(R"(
 HugePageFiller: 2 of sparsely-accessed regular pages treated out of 2.
+HugePageFiller: 1 of sparsely-accessed regular pages skipped collapse out of 2.
+HugePageFiller: 0 of sparsely-accessed regular pages skipped collapse due to backoff out of 2.
 )"));
 
   EXPECT_THAT(buffer_text, testing::HasSubstr(R"(
@@ -4746,6 +4748,103 @@ HugePageFiller: 130 of sparsely-accessed regular used native pages are unbacked.
   EXPECT_THAT(buffer_pbtxt, testing::HasSubstr("num_pages_treated: 2"));
   DeleteVector(p1);
   DeleteVector(p2);
+}
+
+TEST_F(FillerTest, CollapseSkippedTelemetry) {
+  if (kPagesPerHugePage != Length(256)) {
+    return;
+  }
+
+  const Length kAlloc = kPagesPerHugePage / 2;
+
+  SpanAllocInfo sparsely_accessed_info = {1, AccessDensityPrediction::kSparse};
+  std::vector<PAlloc> p1 = AllocateVectorWithSpanAllocInfo(
+      kAlloc + Length(3), sparsely_accessed_info);
+  std::vector<PAlloc> p2 = AllocateVectorWithSpanAllocInfo(
+      kAlloc + Length(2), sparsely_accessed_info);
+  std::vector<PAlloc> p3 = AllocateVectorWithSpanAllocInfo(
+      kAlloc + Length(1), sparsely_accessed_info);
+  ASSERT_TRUE(!p1.empty());
+  ASSERT_TRUE(!p2.empty());
+  ASSERT_TRUE(!p3.empty());
+
+  FakePageFlags pageflags;
+  FakeResidency residency;
+
+  // For p1, set swapped and unbacked pages above thresholds (kMaxResidencyBits
+  // / 2). This tracker will be skipped due to threshold constraints.
+  for (const auto& pa : p1) {
+    pageflags.MarkHugePageBacked(pa.p.start_addr(),
+                                 /*is_hugepage_backed=*/false);
+    Bitmap<kMaxResidencyBits> unbacked, swapped;
+    unbacked.SetRange(0, kMaxResidencyBits / 2);
+    swapped.SetRange(0, kMaxResidencyBits / 2);
+    residency.SetUnbackedAndSwappedBitmaps(pa.p.start_addr(), unbacked,
+                                           swapped);
+  }
+
+  // For p2, set swapped and unbacked pages below thresholds.
+  // This tracker will be attempted for collapse.
+  for (const auto& pa : p2) {
+    pageflags.MarkHugePageBacked(pa.p.start_addr(),
+                                 /*is_hugepage_backed=*/false);
+    Bitmap<kMaxResidencyBits> unbacked, swapped;
+    unbacked.SetRange(0, kMaxResidencyBits / 16);
+    swapped.SetRange(0, kMaxResidencyBits / 16);
+    residency.SetUnbackedAndSwappedBitmaps(pa.p.start_addr(), unbacked,
+                                           swapped);
+  }
+
+  // For p3, set swapped and unbacked pages below thresholds.
+  // This tracker will be skipped due to backoff (triggered by p2).
+  for (const auto& pa : p3) {
+    pageflags.MarkHugePageBacked(pa.p.start_addr(),
+                                 /*is_hugepage_backed=*/false);
+    Bitmap<kMaxResidencyBits> unbacked, swapped;
+    unbacked.SetRange(0, kMaxResidencyBits / 16);
+    swapped.SetRange(0, kMaxResidencyBits / 16);
+    residency.SetUnbackedAndSwappedBitmaps(pa.p.start_addr(), unbacked,
+                                           swapped);
+  }
+
+  // Set mock collapse latency to 50ms (exceeds 30ms threshold).
+  collapse_.SetLatency(absl::Milliseconds(50));
+
+  ASSERT_EQ(filler_.size(), NHugePages(3));
+  TreatHugepageTrackers(/*enable_collapse=*/true,
+                        /*enable_release_free_swapped=*/false,
+                        /*use_userspace_collapse_heuristics=*/false,
+                        EnableUnfilteredCollapse::kDisabled, &pageflags,
+                        &residency);
+
+  std::string buffer_text = PrintToString(1024 * 1024, [&](Printer& printer) {
+    PageHeapSpinLockHolder l;
+    filler_.Print(printer, /*everything=*/true, pageflags);
+  });
+
+  EXPECT_THAT(buffer_text, testing::HasSubstr(R"(
+HugePageFiller: 3 of sparsely-accessed regular pages treated out of 3.
+HugePageFiller: 2 of sparsely-accessed regular pages skipped collapse out of 3.
+HugePageFiller: 1 of sparsely-accessed regular pages skipped collapse due to backoff out of 3.
+)"));
+
+  std::string buffer_pbtxt =
+      PrintToString(1024 * 1024, [&](PbtxtRegion& region) {
+        PageHeapSpinLockHolder l;
+        filler_.PrintInPbtxt(region, pageflags);
+      });
+
+  EXPECT_THAT(buffer_pbtxt, testing::HasSubstr("num_pages_treated: 3"));
+  EXPECT_THAT(buffer_pbtxt,
+              testing::HasSubstr("num_pages_collapse_skipped: 2"));
+  EXPECT_THAT(
+      buffer_pbtxt,
+      testing::HasSubstr("num_pages_collapse_skipped_due_to_backoff: 1"));
+
+  collapse_.SetLatency(absl::ZeroDuration());
+  DeleteVector(p1);
+  DeleteVector(p2);
+  DeleteVector(p3);
 }
 
 TEST_F(FillerTest, ResidencyTelemetryPartiallyReleased) {
@@ -5034,6 +5133,8 @@ HugePageFiller: 0 of sparsely-accessed regular pages hugepage backed out of 3.
 HugePageFiller: Of the non-hugepage backed pages of type sparsely-accessed regular, 0 tcmalloc pages are free, 0 tcmalloc pages are used.
 HugePageFiller: Of the hugepage backed pages of type sparsely-accessed regular, 0 tcmalloc pages are free, 0 tcmalloc pages are used.
 HugePageFiller: 0 of sparsely-accessed regular pages treated out of 3.
+HugePageFiller: 0 of sparsely-accessed regular pages skipped collapse out of 3.
+HugePageFiller: 0 of sparsely-accessed regular pages skipped collapse due to backoff out of 3.
 
 HugePageFiller: Sampled Trackers for sparsely-accessed regular pages:
 
@@ -5119,6 +5220,8 @@ HugePageFiller: 0 of densely-accessed regular pages hugepage backed out of 6.
 HugePageFiller: Of the non-hugepage backed pages of type densely-accessed regular, 0 tcmalloc pages are free, 0 tcmalloc pages are used.
 HugePageFiller: Of the hugepage backed pages of type densely-accessed regular, 0 tcmalloc pages are free, 0 tcmalloc pages are used.
 HugePageFiller: 0 of densely-accessed regular pages treated out of 6.
+HugePageFiller: 0 of densely-accessed regular pages skipped collapse out of 6.
+HugePageFiller: 0 of densely-accessed regular pages skipped collapse due to backoff out of 6.
 
 HugePageFiller: Sampled Trackers for densely-accessed regular pages:
 
@@ -5188,6 +5291,8 @@ HugePageFiller: 0 of donated pages hugepage backed out of 1.
 HugePageFiller: Of the non-hugepage backed pages of type donated, 0 tcmalloc pages are free, 0 tcmalloc pages are used.
 HugePageFiller: Of the hugepage backed pages of type donated, 0 tcmalloc pages are free, 0 tcmalloc pages are used.
 HugePageFiller: 0 of donated pages treated out of 1.
+HugePageFiller: 0 of donated pages skipped collapse out of 1.
+HugePageFiller: 0 of donated pages skipped collapse due to backoff out of 1.
 
 HugePageFiller: Sampled Trackers for donated pages:
 
@@ -5273,6 +5378,8 @@ HugePageFiller: 0 of sparsely-accessed partial released pages hugepage backed ou
 HugePageFiller: Of the non-hugepage backed pages of type sparsely-accessed partial released, 0 tcmalloc pages are free, 0 tcmalloc pages are used.
 HugePageFiller: Of the hugepage backed pages of type sparsely-accessed partial released, 0 tcmalloc pages are free, 0 tcmalloc pages are used.
 HugePageFiller: 0 of sparsely-accessed partial released pages treated out of 0.
+HugePageFiller: 0 of sparsely-accessed partial released pages skipped collapse out of 0.
+HugePageFiller: 0 of sparsely-accessed partial released pages skipped collapse due to backoff out of 0.
 
 HugePageFiller: Sampled Trackers for sparsely-accessed partial released pages:
 
@@ -5358,6 +5465,8 @@ HugePageFiller: 0 of densely-accessed partial released pages hugepage backed out
 HugePageFiller: Of the non-hugepage backed pages of type densely-accessed partial released, 0 tcmalloc pages are free, 0 tcmalloc pages are used.
 HugePageFiller: Of the hugepage backed pages of type densely-accessed partial released, 0 tcmalloc pages are free, 0 tcmalloc pages are used.
 HugePageFiller: 0 of densely-accessed partial released pages treated out of 0.
+HugePageFiller: 0 of densely-accessed partial released pages skipped collapse out of 0.
+HugePageFiller: 0 of densely-accessed partial released pages skipped collapse due to backoff out of 0.
 
 HugePageFiller: Sampled Trackers for densely-accessed partial released pages:
 
@@ -5443,6 +5552,8 @@ HugePageFiller: 0 of sparsely-accessed released pages hugepage backed out of 4.
 HugePageFiller: Of the non-hugepage backed pages of type sparsely-accessed released, 0 tcmalloc pages are free, 0 tcmalloc pages are used.
 HugePageFiller: Of the hugepage backed pages of type sparsely-accessed released, 0 tcmalloc pages are free, 0 tcmalloc pages are used.
 HugePageFiller: 0 of sparsely-accessed released pages treated out of 4.
+HugePageFiller: 0 of sparsely-accessed released pages skipped collapse out of 4.
+HugePageFiller: 0 of sparsely-accessed released pages skipped collapse due to backoff out of 4.
 
 HugePageFiller: Sampled Trackers for sparsely-accessed released pages:
 
@@ -5528,6 +5639,8 @@ HugePageFiller: 0 of densely-accessed released pages hugepage backed out of 1.
 HugePageFiller: Of the non-hugepage backed pages of type densely-accessed released, 0 tcmalloc pages are free, 0 tcmalloc pages are used.
 HugePageFiller: Of the hugepage backed pages of type densely-accessed released, 0 tcmalloc pages are free, 0 tcmalloc pages are used.
 HugePageFiller: 0 of densely-accessed released pages treated out of 1.
+HugePageFiller: 0 of densely-accessed released pages skipped collapse out of 1.
+HugePageFiller: 0 of densely-accessed released pages skipped collapse due to backoff out of 1.
 
 HugePageFiller: Sampled Trackers for densely-accessed released pages:
 
