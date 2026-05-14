@@ -24,15 +24,18 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
+#include "absl/strings/str_format.h"
 #include "absl/time/clock.h"
 #include "absl/time/time.h"
 #include "absl/types/span.h"
 #include "tcmalloc/central_freelist.h"
 #include "tcmalloc/common.h"
+#include "tcmalloc/internal/atomic_stats_counter.h"
 #include "tcmalloc/internal/logging.h"
 #include "tcmalloc/internal/percpu.h"
 #include "tcmalloc/mock_central_freelist.h"
 #include "tcmalloc/mock_transfer_cache.h"
+#include "tcmalloc/testing/testutil.h"
 #include "tcmalloc/testing/thread_manager.h"
 #include "tcmalloc/transfer_cache_internals.h"
 #include "tcmalloc/transfer_cache_stats.h"
@@ -665,6 +668,68 @@ TEST(ShardedTransferCacheManagerTest, ShardsOnDemand) {
   }
 }
 
+TEST(ShardedTransferCacheManagerTest, PrintTelemetry) {
+  if (!subtle::percpu::IsFast()) {
+    return;
+  }
+
+  using ShardedManager = FakeShardedTransferCacheEnvironment::ShardedManager;
+  constexpr int kNumShards = ShardedManager::kMinShardsAllowed;
+  FakeShardedTransferCacheEnvironment env(kNumShards,
+                                          /*use_generic_cache=*/true);
+  ShardedManager& manager = env.sharded_manager();
+
+  // Sharded cache manager uses a flexible transfer cache.
+  env.transfer_cache_manager().SetPartialLegacyTransferCache(true);
+
+  EXPECT_TRUE(manager.should_use(kSizeClass));
+
+  // 1. Push elements to Shard 0 (CPU 0) and Shard 1 (CPU 2).
+  void* ptr0;
+  env.central_freelist().AllocateBatch(absl::MakeSpan(&ptr0, 1));
+  env.SetCurrentCpu(0);
+  manager.Push(kSizeClass, ptr0);
+
+  void* ptr1;
+  env.central_freelist().AllocateBatch(absl::MakeSpan(&ptr1, 1));
+  env.SetCurrentCpu(2);
+  manager.Push(kSizeClass, ptr1);
+
+  // 2. Pop elements from Shard 0 (CPU 0).
+  env.SetCurrentCpu(0);
+  void* pop0 = manager.Pop(kSizeClass);
+  ASSERT_NE(pop0, nullptr);
+  env.central_freelist().FreeBatch({&pop0, 1});
+
+  StatsCounters<kNumClasses> counts;
+  counts[kSizeClass].Add(10);
+
+  // 3. Verify Print.
+  std::string output = PrintToString(
+      1024 * 1024, [&](Printer& printer) { manager.Print(counts, printer); });
+
+  EXPECT_THAT(output,
+              ::testing::HasSubstr(absl::StrFormat("class %3d", kSizeClass)));
+  EXPECT_THAT(output,
+              ::testing::HasSubstr(absl::StrFormat("%8u insert hits", 2)));
+  EXPECT_THAT(output,
+              ::testing::HasSubstr(absl::StrFormat("%8u remove hits", 1)));
+  EXPECT_THAT(output, ::testing::HasSubstr(absl::StrFormat("%8u objs", 1)));
+
+  // 4. Verify PrintInPbtxt.
+  std::string pbtxt_output = PrintToString(
+      1024 * 1024,
+      [&](PbtxtRegion& region) { manager.PrintInPbtxt(counts, region); });
+  size_t class_size =
+      FakeShardedTransferCacheManager::class_to_size(kSizeClass);
+  EXPECT_THAT(pbtxt_output, ::testing::HasSubstr(
+                                absl::StrFormat("sizeclass: %d", class_size)));
+  EXPECT_THAT(pbtxt_output, ::testing::HasSubstr("insert_hits: 2"));
+  EXPECT_THAT(pbtxt_output, ::testing::HasSubstr("remove_hits: 1"));
+  EXPECT_THAT(pbtxt_output, ::testing::HasSubstr("used: 1"));
+  EXPECT_THAT(pbtxt_output, ::testing::HasSubstr("frontend_allocations: 10"));
+}
+
 namespace unit_tests {
 using Env = FakeTransferCacheEnvironment<internal_transfer_cache::TransferCache<
     MockCentralFreeList, FakeTransferCacheManager>>;
@@ -811,6 +876,50 @@ using TransferCacheRealEnv = MultiSizeClassTransferCacheEnvironment<
                                            FakeMultiClassTransferCacheManager>>;
 INSTANTIATE_TYPED_TEST_SUITE_P(TransferCache, RealTransferCacheTest,
                                ::testing::Types<TransferCacheRealEnv>);
+TEST(TransferCacheManagerTest, PrintTelemetry) {
+  TransferCacheRealEnv env;
+  auto& manager = env.transfer_cache_manager();
+
+  int size_class = 1;
+  const size_t batch_size = manager.num_objects_to_move(size_class);
+  ASSERT_GT(batch_size, 0);
+
+  // Perform 2 inserts of batch_size.
+  env.Insert(size_class, batch_size);
+  env.Insert(size_class, batch_size);
+
+  // Perform 1 remove of batch_size.
+  env.Remove(size_class, batch_size);
+
+  StatsCounters<kNumClasses> counts;
+  counts[size_class].Add(10);
+
+  // 1. Verify Print telemetry.
+  std::string output = PrintToString(
+      1024 * 1024, [&](Printer& printer) { manager.Print(counts, printer); });
+
+  EXPECT_THAT(output,
+              ::testing::HasSubstr(absl::StrFormat("class %3d", size_class)));
+  EXPECT_THAT(output,
+              ::testing::HasSubstr(absl::StrFormat("%8u insert hits", 2)));
+  EXPECT_THAT(output,
+              ::testing::HasSubstr(absl::StrFormat("%8u remove hits", 1)));
+  EXPECT_THAT(output,
+              ::testing::HasSubstr(absl::StrFormat("%8u objs", batch_size)));
+
+  // 2. Verify PrintInPbtxt telemetry.
+  std::string pbtxt_output = PrintToString(
+      1024 * 1024,
+      [&](PbtxtRegion& region) { manager.PrintInPbtxt(counts, region); });
+  size_t class_size = manager.class_to_size(size_class);
+  EXPECT_THAT(pbtxt_output, ::testing::HasSubstr(
+                                absl::StrFormat("sizeclass: %d", class_size)));
+  EXPECT_THAT(pbtxt_output, ::testing::HasSubstr("insert_hits: 2"));
+  EXPECT_THAT(pbtxt_output, ::testing::HasSubstr("remove_hits: 1"));
+  EXPECT_THAT(pbtxt_output,
+              ::testing::HasSubstr(absl::StrFormat("used: %d", batch_size)));
+  EXPECT_THAT(pbtxt_output, ::testing::HasSubstr("frontend_allocations: 10"));
+}
 
 }  // namespace resize_tests
 
