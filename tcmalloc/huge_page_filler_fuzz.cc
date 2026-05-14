@@ -730,7 +730,7 @@ TEST(HugePageFillerTest, b510326948) {
        Allocate{.length = 41298, .num_objects = 1, .density_dense = false},
        Allocate{
            .length = 24021, .num_objects = 2147483647, .density_dense = true},
-       SetCollapseLatency{.latency = absl::Nanoseconds(0)},
+       SetCollapseLatency{.latency = absl::ZeroDuration()},
        ModelTail{.length = 0},
        ToggleUnback{},
        AdvanceClock{.amount = absl::Nanoseconds(1237243357567017495)},
