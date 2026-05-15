@@ -34,7 +34,9 @@
 
 // TCMALLOC_PERCPU_RSEQ_SUPPORTED_PLATFORM defines whether or not we have an
 // implementation for the target OS and architecture.
-#if defined(__linux__) && (defined(__x86_64__) || defined(__aarch64__))
+// TODO(b/478927694): re-enable for HWASan
+#if defined(__linux__) && (defined(__x86_64__) || defined(__aarch64__)) && \
+    !defined(ABSL_HAVE_HWADDRESS_SANITIZER)
 #define TCMALLOC_PERCPU_RSEQ_SUPPORTED_PLATFORM 1
 #else
 #define TCMALLOC_PERCPU_RSEQ_SUPPORTED_PLATFORM 0
