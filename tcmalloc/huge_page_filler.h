@@ -67,6 +67,11 @@ namespace tcmalloc_internal {
 constexpr absl::Duration kMaxCollapseLatencyThreshold = absl::Milliseconds(30);
 constexpr absl::Duration kMinCollapseLatencyThreshold = absl::Milliseconds(15);
 
+enum class HugePageTreatmentType : uint8_t {
+  kSampled = 1 << 0,
+  kCollapse = 1 << 1,
+};
+
 // PageTracker keeps track of the allocation status of every page in a HugePage.
 // It allows allocation and deallocation of a contiguous run of pages.
 //
@@ -284,8 +289,13 @@ class PageTracker : public TList<PageTracker>::Elem {
     return hugepage_residency_state_.being_collapsed;
   }
 
-  void SetDontFreeTracker(bool value) { dont_free_tracker_ = value; }
-  bool DontFreeTracker() const { return dont_free_tracker_; }
+  void SetDontFreeTracker(HugePageTreatmentType type) {
+    dont_free_tracker_mask_ |= static_cast<uint8_t>(type);
+  }
+  void ClearDontFreeTracker(HugePageTreatmentType type) {
+    dont_free_tracker_mask_ &= ~static_cast<uint8_t>(type);
+  }
+  bool DontFreeTracker() const { return dont_free_tracker_mask_ != 0; }
 
   struct TagState {
     bool sampled_for_tagging = false;
@@ -362,7 +372,7 @@ class PageTracker : public TList<PageTracker>::Elem {
   // pageheap_lock might manipulate the tracker state without holding the
   // lock. When all the pages on the tracked hugepage are freed, this field
   // is checked to ensure that the tracker is not freed right away.
-  bool dont_free_tracker_ = false;
+  uint8_t dont_free_tracker_mask_ = 0;
 
   [[nodiscard]] bool ReleasePages(Range r, MemoryModifyFunction& unback) {
     bool success = unback(r).success;
@@ -1998,7 +2008,7 @@ class SampledTrackerTreatment final : public HugePageTreatment {
       // Setting this bit makes sure that the tracker is not freed under us
       // when the pageheap lock is unlocked and we are in the middle of
       // applying the treatment.
-      pt.SetDontFreeTracker(/*value=*/true);
+      pt.SetDontFreeTracker(HugePageTreatmentType::kSampled);
     }
   }
 
@@ -2034,7 +2044,7 @@ class SampledTrackerTreatment final : public HugePageTreatment {
     for (int i = 0; i < num_valid_trackers_; ++i) {
       PageTracker* tracker = selected_trackers_[i].tracker;
       TC_ASSERT_NE(tracker, nullptr);
-      tracker->SetDontFreeTracker(/*value=*/false);
+      tracker->ClearDontFreeTracker(HugePageTreatmentType::kSampled);
     }
   }
 
@@ -2530,7 +2540,7 @@ class HugePageUnbackedTrackerTreatment final : public HugePageTreatment {
       if (num_valid_trackers_ < kTotalTrackersToScan) {
         selected_trackers_[num_valid_trackers_] = &pt;
         ++num_valid_trackers_;
-        pt.SetDontFreeTracker(/*value=*/true);
+        pt.SetDontFreeTracker(HugePageTreatmentType::kCollapse);
         if (num_valid_trackers_ == kTotalTrackersToScan) {
           std::make_heap(selected_trackers_.begin(),
                          selected_trackers_.begin() + num_valid_trackers_,
@@ -2547,8 +2557,8 @@ class HugePageUnbackedTrackerTreatment final : public HugePageTreatment {
                     CompareForHugePageTreatment);
       PageTracker* last = selected_trackers_[num_valid_trackers_ - 1];
       TC_ASSERT_NE(last, nullptr);
-      pt.SetDontFreeTracker(/*value=*/true);
-      last->SetDontFreeTracker(/*value=*/false);
+      pt.SetDontFreeTracker(HugePageTreatmentType::kCollapse);
+      last->ClearDontFreeTracker(HugePageTreatmentType::kCollapse);
       selected_trackers_[num_valid_trackers_ - 1] = &pt;
       std::push_heap(selected_trackers_.begin(),
                      selected_trackers_.begin() + num_valid_trackers_,
@@ -2646,7 +2656,7 @@ class HugePageUnbackedTrackerTreatment final : public HugePageTreatment {
     for (int i = 0; i < num_valid_trackers_; ++i) {
       PageTracker* tracker = residency_states_[i].tracker;
       TC_ASSERT_NE(tracker, nullptr);
-      tracker->SetDontFreeTracker(/*value=*/false);
+      tracker->ClearDontFreeTracker(HugePageTreatmentType::kCollapse);
       tracker->SetHugePageResidencyState(residency_states_[i].tracker_state);
       if (residency_states_[i].tracker_state.maybe_hugepage_backed) {
         continue;

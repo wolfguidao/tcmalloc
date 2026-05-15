@@ -786,18 +786,19 @@ TEST_F(PageTrackerTest, b151915873) {
 class FakeClock {
  public:
   FakeClock() = default;
-  static int64_t now() { return clock_; }
+  static int64_t now() { return clock_.load(std::memory_order_relaxed); }
   static double freq() { return absl::ToDoubleNanoseconds(absl::Seconds(2)); }
   static void Advance(absl::Duration d) {
-    clock_ += absl::ToDoubleSeconds(d) * freq();
+    clock_.fetch_add(static_cast<int64_t>(absl::ToDoubleSeconds(d) * freq()),
+                     std::memory_order_relaxed);
   }
-  static void ResetClock() { clock_ = 1234; }
+  static void ResetClock() { clock_.store(1234, std::memory_order_relaxed); }
 
  private:
-  static int64_t clock_;
+  static std::atomic<int64_t> clock_;
 };
 
-int64_t FakeClock::clock_ = 1234;
+std::atomic<int64_t> FakeClock::clock_{1234};
 
 class MockCollapse final : public MemoryModifyFunction {
  public:
@@ -837,20 +838,24 @@ class MockSetAnonVmaName final : public MemoryTagFunction {
  public:
   MockSetAnonVmaName() = default;
   void operator()(Range r, std::optional<absl::string_view> name) override {
-    EXPECT_EQ(r.n, kPagesPerHugePage);
-    if (name.has_value()) {
-      EXPECT_EQ(name, expected_name_);
-    } else {
-      EXPECT_EQ(expected_name_, "tcmalloc_region_NORMAL");
+    if (!ignore_name_) {
+      EXPECT_EQ(r.n, kPagesPerHugePage);
+      if (name.has_value()) {
+        EXPECT_EQ(name, expected_name_);
+      } else {
+        EXPECT_EQ(expected_name_, "tcmalloc_region_NORMAL");
+      }
     }
-    ++times_called_;
+    times_called_.fetch_add(1, std::memory_order_relaxed);
   }
   void SetExpectedName(absl::string_view name) { expected_name_ = name; }
-  int TimesCalled() { return times_called_; }
+  int TimesCalled() { return times_called_.load(std::memory_order_relaxed); }
+  void SetIgnoreName(bool ignore) { ignore_name_ = ignore; }
 
  private:
   absl::string_view expected_name_ = "tcmalloc_region_NORMAL";
-  int times_called_ = 0;
+  std::atomic<int> times_called_{0};
+  bool ignore_name_ = false;
 };
 
 class BlockingUnback final : public MemoryModifyFunction {
@@ -6004,6 +6009,68 @@ TEST_F(FillerTest, ReleasedPagesStatistics) {
   EXPECT_EQ(filler_.used_pages_in_any_subreleased(), N);
 
   DeleteVector(a1);
+}
+
+TEST_F(FillerTest, ConcurrentTreatmentInterferenceStress) {
+  std::atomic<bool> done(false);
+  randomize_density_ = false;
+
+  FakePageFlags pageflags;
+  FakeResidency residency;
+  SpanAllocInfo info;
+  info.objects_per_span = 1;
+  info.density = AccessDensityPrediction::kSparse;
+  std::vector<PAlloc> allocated;
+  const Length kAlloc = kPagesPerHugePage / 2 + Length(1);
+
+  set_anon_vma_name_.SetIgnoreName(true);
+
+  for (int i = 0; i < 1000; ++i) {
+    PAlloc p1 = AllocateWithSpanAllocInfo(kAlloc, info);
+    allocated.push_back(p1);
+    p1.pt->SetTagState({.sampled_for_tagging = true, .record_time = 0});
+    pageflags.MarkHugePageBacked(p1.p.start_addr(), false);
+    Bitmap<kMaxResidencyBits> unbacked, swapped;
+    unbacked.SetRange(0, 128);
+    swapped.SetRange(128, 128);
+    residency.SetUnbackedAndSwappedBitmaps(p1.p.start_addr(), unbacked,
+                                           swapped);
+  }
+
+  auto collapse_function = [&]() {
+    while (!done.load(std::memory_order_acquire)) {
+      FakeClock::Advance(absl::Minutes(10));
+      TreatHugepageTrackers(/*enable_collapse=*/true,
+                            /*enable_release_free_swapped=*/true,
+                            /*use_userspace_collapse_heuristics=*/true,
+                            EnableUnfilteredCollapse::kDisabled, &pageflags,
+                            &residency);
+    }
+  };
+  std::thread collapse_thread = std::thread(collapse_function);
+
+  for (auto& p : allocated) {
+    DeleteRaw(p);
+  }
+
+  done = true;
+  collapse_thread.join();
+
+  while (true) {
+    PageTracker* pt;
+    {
+      PageHeapSpinLockHolder l;
+      pt = filler_.FetchFullyFreedTracker();
+    }
+    if (pt == nullptr) {
+      break;
+    }
+    EXPECT_EQ(pt->longest_free_range(), kPagesPerHugePage);
+    EXPECT_TRUE(pt->empty());
+    --hp_contained_;
+    delete pt;
+  }
+  CheckStats();
 }
 
 TEST(SkipSubreleaseIntervalsTest, EmptyIsNotEnabled) {
